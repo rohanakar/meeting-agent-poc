@@ -1,0 +1,35 @@
+# Overrides for the OCI host, used by deploy/oci.sh (COMPOSE_FILE in its .env). Needs Docker
+# Compose 2.24 or newer for !reset.
+#
+# Nothing publishes a host port. Nginx Proxy Manager reaches the app through meeting-agent-web on
+# the shared_net network; api stays off shared_net, where its service name "api" would shadow
+# other stacks' "api".
+services:
+  postgres:
+    ports: !reset []
+    restart: unless-stopped
+  redis:
+    ports: !reset []
+    restart: unless-stopped
+  api:
+    ports: !reset []
+    restart: unless-stopped
+  worker-bots:
+    restart: unless-stopped
+  worker-pipeline:
+    restart: unless-stopped
+  meeting-agent-web:
+    image: caddy:2-alpine
+    command: caddy reverse-proxy --from :8000 --to meeting-agent-api-1:8000
+    # Healthy, not just started: before that Caddy has nothing to forward to and answers 502.
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      default: {}
+      shared_net: {}
+
+networks:
+  shared_net:
+    external: true
