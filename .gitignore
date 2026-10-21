@@ -9,3 +9,4 @@ node_modules/
 ui/dist/
 *.egg-info/
 .DS_Store
+*.tsbuildinfo

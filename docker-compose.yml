@@ -1,0 +1,108 @@
+name: meeting-agent
+
+x-app: &app
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  image: meeting-agent:latest
+  env_file:
+    - path: .env
+      required: false
+  environment:
+    DATABASE_URL: postgresql+psycopg://meeting:meeting@postgres:5432/meeting_agent
+    REDIS_URL: redis://redis:6379/0
+    DATA_DIR: /data
+  volumes:
+    - data:/data
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_started
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: meeting
+      POSTGRES_PASSWORD: meeting
+      POSTGRES_DB: meeting_agent
+    ports:
+      - "5442:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U meeting -d meeting_agent"]
+      interval: 2s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6392:6379"
+
+  api:
+    <<: *app
+    command: sh -c "alembic upgrade head && uvicorn meeting_agent.api.app:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8040:8000"
+
+  # One process per bot that may run at the same time: run_bot blocks until its bot exits.
+  worker-bots:
+    <<: *app
+    command: rq worker --with-scheduler --url redis://redis:6379/0 bots
+    volumes:
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    deploy:
+      replicas: ${MAX_CONCURRENT_BOTS:-2}
+
+  # The Docker socket: stop_bot runs here, so Stop works while every bots worker is busy.
+  worker-pipeline:
+    <<: *app
+    command: rq worker --url redis://redis:6379/0 pipeline
+    volumes:
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # One-time sign-in for signed-in bots: docker compose --profile login up bot-login,
+  # then open http://localhost:6080/vnc.html. Published on localhost only; on EC2 use an SSH tunnel.
+  bot-login:
+    <<: *app
+    profiles: [login]
+    command: ["bot-login"]
+    ports:
+      - "127.0.0.1:6080:6080"
+
+  # Egress through an exit node on another network (e.g. an office line). One container serves
+  # both modes: tunnel bots join its network namespace, proxy bots use its HTTP proxy on :1055.
+  tailscale:
+    image: tailscale/tailscale:stable
+    container_name: meeting-agent-tailscale
+    profiles: [tunnel]
+    hostname: meeting-agent-bots
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+      TS_OUTBOUND_HTTP_PROXY_LISTEN: 0.0.0.0:1055
+      # LAN access keeps the compose network (the API) reachable; Docker's DNS stays in charge.
+      TS_EXTRA_ARGS: --exit-node=${TS_EXIT_NODE:-} --exit-node-allow-lan-access --accept-dns=false
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+
+volumes:
+  pgdata:
+  tailscale-state:
+  # Fixed name: the worker mounts it into the bot containers it starts.
+  data:
+    name: meeting-agent-data
+
+networks:
+  default:
+    name: meeting-agent

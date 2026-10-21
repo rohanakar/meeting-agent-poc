@@ -1,0 +1,51 @@
+import asyncio
+import contextlib
+import logging
+
+from playwright.async_api import Page
+
+from ..config import BotSettings
+from ..enums import EventKind
+from .adapters.base import MeetingAdapter, with_overlay_retry
+from .report import Reporter
+
+logger = logging.getLogger(__name__)
+
+# Set up by docker/bot-entrypoint.sh: whatever plays here reaches Chromium's microphone.
+NOTICE_SINK = "notice_in"
+
+
+async def give_notice(
+    adapter: MeetingAdapter, page: Page, settings: BotSettings, reporter: Reporter
+) -> tuple[bool, bool]:
+    """Tells the meeting it is being recorded: out loud first, then in chat.
+
+    The spoken notice goes first, and by the time it ends the call page has settled, so the chat
+    panel opens quickly. Returns whether the chat notice and the spoken notice went out. The bot
+    records only when at least one did, and keeps trying the chat notice while it records
+    (main.watch).
+    """
+    posted = spoken = False
+    if settings.notice_audio:
+        try:
+            await adapter.set_microphone(page, True)
+            player = await asyncio.create_subprocess_exec(
+                "ffmpeg", "-nostdin", "-loglevel", "error", "-re", "-i", settings.notice_audio,
+                "-f", "pulse", "-device", NOTICE_SINK, "notice",
+            )  # fmt: skip
+            spoken = await asyncio.wait_for(player.wait(), timeout=120) == 0
+        except Exception as error:
+            logger.warning("spoken notice failed: %r", error)
+        finally:
+            # A microphone left on would put the bot's silence, and any noise, into the call.
+            with contextlib.suppress(Exception):
+                await adapter.set_microphone(page, False)
+        await reporter.event(EventKind.NOTICE_SPOKEN, ok=spoken)
+
+    try:
+        await with_overlay_retry(page, lambda: adapter.send_chat(page, settings.notice_text))
+        posted = True
+    except Exception as error:
+        logger.warning("chat notice failed: %r", error)
+    await reporter.event(EventKind.NOTICE_POSTED, ok=posted)
+    return posted, spoken

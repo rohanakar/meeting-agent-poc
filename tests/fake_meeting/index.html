@@ -1,0 +1,80 @@
+<!doctype html>
+<!--
+  A stand-in meeting page for the bot container test. It asks for a name, admits the bot after
+  a second, plays clip.wav as "the meeting", then ends. ?deny shows a denial instead.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fake meeting</title>
+  </head>
+  <body>
+    <section id="lobby">
+      <input id="name" aria-label="Your name" />
+      <button id="ask">Ask to join</button>
+    </section>
+    <p id="waiting" hidden>Asking to join...</p>
+    <p id="denied" hidden>Someone in the call denied your request to join</p>
+    <section id="call" hidden>
+      <button id="leave">Leave call</button>
+      <button id="mic" data-on="false">Microphone</button>
+      <ul id="participants"><li>Host</li></ul>
+      <ul id="messages"></ul>
+      <textarea id="chat-input" aria-label="Send a message"></textarea>
+      <button id="captions-on">Turn on captions</button>
+      <div id="captions" role="region" aria-label="Captions" hidden>Captions on</div>
+    </section>
+    <p id="ended" hidden>The call has ended</p>
+    <audio id="meeting-audio" src="clip.wav"></audio>
+    <script>
+      const show = (id, visible = true) => (document.getElementById(id).hidden = !visible);
+      const audio = document.getElementById("meeting-audio");
+
+      document.getElementById("ask").onclick = () => {
+        show("lobby", false);
+        show("waiting");
+        setTimeout(() => {
+          show("waiting", false);
+          if (location.search.includes("deny")) return show("denied");
+          const self = document.createElement("li");
+          self.textContent = document.getElementById("name").value;
+          document.getElementById("participants").append(self);
+          show("call");
+          // Leave the bot time to give its notice before the meeting starts talking.
+          setTimeout(() => audio.play(), 3000);
+        }, 1000);
+      };
+      // Live captions: while the clip plays, "Host" says one more word every half second.
+      document.getElementById("captions-on").onclick = () => show("captions");
+      let captionTimer;
+      audio.onplay = () => {
+        const words = [];
+        captionTimer = setInterval(() => {
+          words.push(`word${words.length + 1}`);
+          document.getElementById("captions").innerText = `Host\n${words.join(" ")}`;
+        }, 500);
+      };
+      audio.onended = () => setTimeout(() => {
+        clearInterval(captionTimer);
+        show("call", false);
+        show("ended");
+      }, 1000);
+      document.getElementById("mic").onclick = (event) => {
+        const button = event.target;
+        button.dataset.on = button.dataset.on === "true" ? "false" : "true";
+      };
+      document.getElementById("chat-input").onkeydown = (event) => {
+        if (event.key !== "Enter") return;
+        const message = document.createElement("li");
+        message.textContent = event.target.value;
+        document.getElementById("messages").append(message);
+        event.target.value = "";
+        event.preventDefault();
+      };
+      document.getElementById("leave").onclick = () => {
+        show("call", false);
+        show("ended");
+      };
+    </script>
+  </body>
+</html>
