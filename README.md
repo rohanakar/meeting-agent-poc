@@ -117,7 +117,7 @@ Each bot starts from a copy of `data/accounts/<label>/profile`, so several can r
 
 ## Deploying on OCI
 
-Jenkins checks the repo out on the OCI host and runs `deploy/oci.sh` there over SSH. The script writes `.env` from the host's secrets file, starts the stack with `docker-compose.server.yml` (no published ports; Nginx Proxy Manager reaches the app through the `meeting-agent-web` Caddy sidecar on `shared_net`), and waits until the API is healthy.
+Jenkins checks the repo out on the OCI host and runs `deploy/oci.sh` there over SSH. The script writes `.env` from the host's secrets file, starts the stack with `docker-compose.server.yml` (no published ports; Nginx Proxy Manager reaches the app through the `meeting-agent-web` Caddy sidecar on `shared_net`), and waits until the API is healthy. On the server, summaries and search vectors come from Claude Code in the `mock-anthropic` container, logged in with a Claude Code token; speech to text is ElevenLabs.
 
 The Jenkins job's shell step:
 
@@ -140,12 +140,13 @@ The script checks these and stops with a message if one is missing.
    API_KEY=$(od -An -N20 -tx1 /dev/urandom | tr -d ' \n')
    INTERNAL_TOKEN=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
    ELEVENLABS_API_KEY=<key>
-   ANTHROPIC_API_KEY=<key>
-   OPENAI_API_KEY=<key>
+   CLAUDE_CODE_OAUTH_TOKEN=<token from claude setup-token>
    EOF
    )
    grep ^API_KEY= ~/secrets/meeting-agent.env   # the key the UI asks for
    ```
+
+   `CLAUDE_CODE_OAUTH_TOKEN` is the `sk-ant-oat01-…` token. It only works inside Claude Code, so it must not go in `ANTHROPIC_API_KEY`: Anthropic's API refuses it ("invalid x-api-key"). No Anthropic or OpenAI API key is needed.
 
 2. **Docker Compose 2.29.7.** The host's own Compose (2.21) predates `!reset` and `env_file: {required}`, so the deploy uses its own copy and leaves the system one alone:
 

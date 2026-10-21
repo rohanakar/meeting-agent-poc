@@ -4,6 +4,16 @@
 # Nothing publishes a host port. Nginx Proxy Manager reaches the app through meeting-agent-web on
 # the shared_net network; api stays off shared_net, where its service name "api" would shadow
 # other stacks' "api".
+#
+# Summaries and search vectors come from Claude Code in the mock-anthropic container, logged in
+# with CLAUDE_CODE_OAUTH_TOKEN from the secrets file, not from the Anthropic and OpenAI APIs.
+# Speech to text stays on ElevenLabs.
+x-claude-code: &claude-code
+  ANTHROPIC_API_KEY: test
+  ANTHROPIC_BASE_URL: http://mock-anthropic:11435
+  OPENAI_API_KEY: test
+  OPENAI_BASE_URL: http://mock-anthropic:11435/v1
+
 services:
   postgres:
     ports: !reset []
@@ -12,11 +22,14 @@ services:
     ports: !reset []
     restart: unless-stopped
   api:
+    environment: *claude-code
     ports: !reset []
     restart: unless-stopped
   worker-bots:
+    environment: *claude-code
     restart: unless-stopped
   worker-pipeline:
+    environment: *claude-code
     restart: unless-stopped
   meeting-agent-web:
     image: caddy:2-alpine
@@ -29,6 +42,16 @@ services:
     networks:
       default: {}
       shared_net: {}
+
+  mock-anthropic:
+    build:
+      context: .
+      dockerfile: mocks/anthropic/Dockerfile
+    image: meeting-agent-mock-anthropic:latest
+    environment:
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLAUDE_CODE_OAUTH_TOKEN:-}
+      MOCK_API_KEY: test
+    restart: unless-stopped
 
 networks:
   shared_net:

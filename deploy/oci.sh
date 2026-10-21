@@ -11,6 +11,8 @@ SECRETS_FILE="$HOME/secrets/meeting-agent.env"
 COMPOSE="$HOME/tools/docker-compose-v2.29.7"
 fail() { echo "$1 See README, \"Deploying on OCI\"." >&2; exit 1; }
 [ -f "$SECRETS_FILE" ] || fail "Create $SECRETS_FILE first."
+grep -q '^CLAUDE_CODE_OAUTH_TOKEN=.' "$SECRETS_FILE" \
+    || fail "Add CLAUDE_CODE_OAUTH_TOKEN (from claude setup-token) to $SECRETS_FILE."
 [ -x "$COMPOSE" ] || fail "Install Docker Compose v2.29.7 as $COMPOSE first."
 docker network inspect shared_net >/dev/null 2>&1 \
     || fail "Create the Docker network shared_net and attach Nginx Proxy Manager to it first."
