@@ -5,6 +5,7 @@ import logging
 import re
 import subprocess
 import uuid
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,7 @@ from ..enums import EventKind, Identity, MeetingStatus
 from ..models import ActionItem, BotEvent, Chunk, Meeting, Summary, TranscriptSegment
 from ..pipeline.chunks import summary_chunks, transcript_chunks
 from ..pipeline.embed import embed_texts
+from ..pipeline.speaker_map import map_speakers, read_attendees
 from ..pipeline.stt import transcribe_file
 from ..pipeline.summarize import summarize
 from ..queues import PIPELINE_QUEUE, get_queue
@@ -110,6 +112,11 @@ def fail(meeting_id: str, reason: str) -> None:
         session.commit()
 
 
+def read_json(path: Path) -> list[Any]:
+    """A list the bot wrote next to the recording; empty when this run did not write one."""
+    return json.loads(path.read_text()) if path.is_file() else []
+
+
 def max_volume_db(path: Path) -> float:
     result = subprocess.run(
         ["ffmpeg", "-nostdin", "-i", str(path), "-af", "volumedetect", "-f", "null", "-"],
@@ -135,8 +142,17 @@ def transcribe(meeting_id: str) -> None:
         fail(meeting_id, f"Transcription failed: {error!r}"[:500])
         raise
 
+    # The speaker map: ElevenLabs' labels to the names (and emails) the bot saw in the meeting.
+    folder = meeting_dir(meeting_id)
+    attendees = read_attendees(read_json(folder / "participants.json"))
+    matches = map_speakers(turns, read_json(folder / "speaker_timeline.json"), attendees)
+    (folder / "speaker_map.json").write_text(
+        json.dumps({label: asdict(match) for label, match in matches.items()}, indent=2)
+    )
+
     with get_sessionmaker()() as session:
         meeting = session.get(Meeting, uuid.UUID(meeting_id))
+        meeting.attendees = attendees
         session.execute(delete(TranscriptSegment).where(TranscriptSegment.meeting_id == meeting.id))
         session.add_all(
             TranscriptSegment(
@@ -144,6 +160,8 @@ def transcribe(meeting_id: str) -> None:
                 meeting_id=meeting.id,
                 idx=idx,
                 speaker_label=turn.speaker_label,
+                speaker_name=match.name if (match := matches.get(turn.speaker_label)) else None,
+                speaker_email=match.email if match else None,
                 start_ms=turn.start_ms,
                 end_ms=turn.end_ms,
                 text=turn.text,
@@ -151,7 +169,12 @@ def transcribe(meeting_id: str) -> None:
             for idx, turn in enumerate(turns)
         )
         add_event(
-            session, meeting, EventKind.TRANSCRIBED, segments=len(turns), max_volume_db=volume
+            session,
+            meeting,
+            EventKind.TRANSCRIBED,
+            segments=len(turns),
+            max_volume_db=volume,
+            speaker_map={label: match.name for label, match in matches.items()},
         )
         if not turns:
             meeting.status = MeetingStatus.FAILED
@@ -176,15 +199,19 @@ def process(meeting_id: str) -> None:
                     .order_by(TranscriptSegment.idx)
                 )
             )
-            participants_file = meeting_dir(meeting_id) / "participants.json"
-            participants = (
-                json.loads(participants_file.read_text()) if participants_file.is_file() else []
-            )
-            result = summarize(meeting.title, participants, segments)
+            people = [
+                f"{attendee['name']} <{attendee['email']}>"
+                if attendee.get("email")
+                else attendee["name"]
+                for attendee in meeting.attendees
+            ]
+            result = summarize(meeting.title, people, segments)
 
+            # Claude names only the speakers the captions left anonymous.
             names = {speaker.label: speaker.name for speaker in result.speakers if speaker.name}
             for segment in segments:
-                segment.speaker_name = names.get(segment.speaker_label)
+                if segment.speaker_name is None:
+                    segment.speaker_name = names.get(segment.speaker_label)
             drafts = transcript_chunks(segments) + summary_chunks(result, segments)
             embeddings = embed_texts([draft.text for draft in drafts])
 

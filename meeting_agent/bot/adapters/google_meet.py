@@ -4,7 +4,14 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
 from ...enums import Admission
-from .base import MeetingAdapter, any_text, click_if_visible, is_visible, poll_admission
+from .base import (
+    EMAIL,
+    MeetingAdapter,
+    any_text,
+    click_if_visible,
+    is_visible,
+    poll_admission,
+)
 
 
 def either(*selectors: str) -> str:
@@ -39,6 +46,8 @@ class GoogleMeet(MeetingAdapter):
         ),
         "participant_tile": "[data-participant-id]",
         "participant_name": "span.notranslate",
+        "captions_button": re.compile(r"^Turn on captions"),
+        "captions_region": '[role="region"][aria-label*="Captions" i]',
         "denied_text": any_text("denied your request to join"),
         "blocked_text": any_text("You can't join this call", "You can't join this video call"),
         "timeout_text": any_text("No one responded to your request"),
@@ -113,6 +122,38 @@ class GoogleMeet(MeetingAdapter):
             name = (await label.inner_text()).strip() if await label.count() else ""
             names[participant_id] = name or f"Participant {len(names) + 1}"
         return sorted(names.values())
+
+    async def participant_emails(self, page: Page) -> dict[str, str]:
+        # Meet seldom puts an email in a tile; when it does (a label, a tooltip), keep it.
+        emails: dict[str, str] = {}
+        for tile in await page.locator(self.s["participant_tile"]).all():
+            label = tile.locator(self.s["participant_name"]).first
+            if not await label.count():
+                continue
+            name = (await label.inner_text()).strip()
+            found = EMAIL.search(await tile.inner_html())
+            if name and found:
+                emails[name] = found.group(0)
+        return emails
+
+    async def enable_captions(self, page: Page) -> bool:
+        if not await click_if_visible(page.get_by_role("button", name=self.s["captions_button"])):
+            # Meet's shortcut for captions, for when the button's label changed.
+            await page.keyboard.press("c")
+        try:
+            # Attached, not visible: the area is empty, so without size, until someone speaks.
+            await page.locator(self.s["captions_region"]).first.wait_for(
+                state="attached", timeout=5000
+            )
+        except PlaywrightError:
+            return False
+        return True
+
+    async def captions_text(self, page: Page) -> str | None:
+        region = page.locator(self.s["captions_region"]).first
+        if not await is_visible(region):
+            return None
+        return await region.inner_text()
 
     async def ended_reason(self, page: Page) -> str | None:
         if page.is_closed():

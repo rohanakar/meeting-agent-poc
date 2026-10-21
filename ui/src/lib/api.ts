@@ -29,6 +29,7 @@ export interface Meeting {
   admission: string | null;
   failure_reason: string | null;
   metadata: Record<string, string>;
+  attendees: { name: string; email: string | null }[];
   created_at: string;
   updated_at: string;
 }
@@ -50,6 +51,7 @@ export interface Segment {
   idx: number;
   speaker_label: string;
   speaker_name: string | null;
+  speaker_email: string | null;
   start_ms: number;
   end_ms: number;
   text: string;

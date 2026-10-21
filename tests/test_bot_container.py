@@ -112,6 +112,7 @@ def test_bot_gives_notice_then_records_the_meeting(
         "notice_posted",
         "notice_spoken",
         "recording_started",
+        "captions",
         "participants",
         "meeting_ended",
         "recording_saved",
@@ -123,7 +124,15 @@ def test_bot_gives_notice_then_records_the_meeting(
     assert by_kind["participants"] == {"names": ["Host", "Test Notetaker"]}
     assert by_kind["meeting_ended"] == {"reason": "ended"}
     assert by_kind["egress_checked"]["leaked_ips"] == []
-    assert json.loads((out / "participants.json").read_text()) == ["Host", "Test Notetaker"]
+    assert by_kind["captions"] == {"on": True}
+    assert json.loads((out / "participants.json").read_text()) == [
+        {"name": "Host", "email": None},
+        {"name": "Test Notetaker", "email": None},
+    ]
+    # The fake captions name "Host" while the 6 s clip plays: about one mark per half second.
+    marks = json.loads((out / "speaker_timeline.json").read_text())
+    assert {mark["name"] for mark in marks} == {"Host"}
+    assert len(marks) >= 6
     # The clip is a 440 Hz tone at about -18 dB; silence would be -91 dB.
     assert max_volume_db(out / "audio.ogg") > -30
 

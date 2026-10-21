@@ -50,6 +50,7 @@ class EventKind(StrEnum):
     NOTICE_POSTED = "notice_posted"
     NOTICE_SPOKEN = "notice_spoken"
     RECORDING_STARTED = "recording_started"
+    CAPTIONS = "captions"
     PARTICIPANTS = "participants"
     MEETING_ENDED = "meeting_ended"
     RECORDING_SAVED = "recording_saved"

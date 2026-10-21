@@ -45,7 +45,7 @@ def summarize(
     settings = get_settings()
     transcript = "\n".join(
         f"[S{segment.idx} {format_timestamp(segment.start_ms)}] "
-        f"{segment.speaker_label}: {segment.text}"
+        f"{segment.speaker_name or segment.speaker_label}: {segment.text}"
         for segment in segments
     )
     content = (

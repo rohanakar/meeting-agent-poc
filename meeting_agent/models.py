@@ -50,6 +50,10 @@ class Meeting(Namespaced, Base):
     rq_job_id: Mapped[str | None] = mapped_column(String(64))
     # "metadata" is reserved on declarative classes, so the attribute has another name.
     meta: Mapped[dict[str, Any]] = mapped_column("metadata", JSONB, default=dict)
+    # Who the bot saw in the meeting: {"name", "email"}, the email only when the page showed one.
+    attendees: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, default=list, server_default="[]"
+    )
 
 
 class BotEvent(Namespaced, Base):
@@ -74,6 +78,7 @@ class TranscriptSegment(Namespaced, Base):
     idx: Mapped[int] = mapped_column(Integer)
     speaker_label: Mapped[str] = mapped_column(String(64))
     speaker_name: Mapped[str | None] = mapped_column(String(256))
+    speaker_email: Mapped[str | None] = mapped_column(String(320))
     start_ms: Mapped[int] = mapped_column(Integer)
     end_ms: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)

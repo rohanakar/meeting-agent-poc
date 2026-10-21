@@ -37,6 +37,7 @@ class MeetingOut(BaseModel):
     admission: str | None
     failure_reason: str | None
     metadata: dict[str, Any] = Field(validation_alias="meta")
+    attendees: list[dict[str, Any]]
     created_at: datetime
     updated_at: datetime
 
@@ -62,6 +63,7 @@ class SegmentOut(BaseModel):
     idx: int
     speaker_label: str
     speaker_name: str | None
+    speaker_email: str | None
     start_ms: int
     end_ms: int
     text: str

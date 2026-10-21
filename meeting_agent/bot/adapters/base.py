@@ -61,6 +61,18 @@ class MeetingAdapter:
         """Why the meeting is over for the bot, or None while it goes on."""
         raise NotImplementedError
 
+    async def participant_emails(self, page: Page) -> dict[str, str]:
+        """Email by participant name, for whoever the page shows one. Most pages show none."""
+        return {}
+
+    async def enable_captions(self, page: Page) -> bool:
+        """Turns on the platform's live captions for the bot. False when there are none."""
+        return False
+
+    async def captions_text(self, page: Page) -> str | None:
+        """The caption area's text: each speaker's name on a line, then what they said."""
+        return None
+
     async def leave(self, page: Page) -> None:
         raise NotImplementedError
 
@@ -140,6 +152,9 @@ async def poll_admission(
             return result
         await asyncio.sleep(1)
     return Admission.TIMEOUT
+
+
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 
 def any_text(*phrases: str) -> re.Pattern[str]:

@@ -35,6 +35,14 @@ class FakeMeeting(MeetingAdapter):
     async def ended_reason(self, page: Page) -> str | None:
         return "ended" if await is_visible(page.locator("#ended")) else None
 
+    async def enable_captions(self, page: Page) -> bool:
+        await page.locator("#captions-on").click()
+        return await is_visible(page.locator("#captions"))
+
+    async def captions_text(self, page: Page) -> str | None:
+        captions = page.locator("#captions")
+        return await captions.inner_text() if await is_visible(captions) else None
+
     async def leave(self, page: Page) -> None:
         if await is_visible(page.locator("#leave")):
             await page.locator("#leave").click()

@@ -11,10 +11,12 @@ no notice, stopped first), 1 the bot failed. A partial recording is kept in ever
 import asyncio
 import json
 import logging
+import re
 import signal
 import sys
 import time
 
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, async_playwright
 
 from ..config import BotSettings
@@ -27,6 +29,7 @@ from .media import media_state
 from .notice import give_notice
 from .recorder import Recorder
 from .report import Reporter
+from .speakers import sample_speakers
 
 logger = logging.getLogger("meeting_agent.bot")
 
@@ -36,6 +39,8 @@ MEDIA_LOST_S = 20
 # Sound energy (WebRTC totalAudioEnergy) one poll must add to count as someone speaking:
 # about -40 dBFS on average over the poll; background hiss stays far below it.
 SPEECH_ENERGY_PER_POLL = 1e-3
+# Names the bot makes up for tiles without a label; they count people but name nobody.
+PLACEHOLDER_NAME = re.compile(r"^Participant \d+$")
 
 
 class NotRecorded(Exception):
@@ -81,8 +86,9 @@ async def watch(
     stop: asyncio.Event,
     reporter: Reporter,
     seen: set[str],
+    emails: dict[str, str],
 ) -> str:
-    """Returns why the meeting ended for the bot."""
+    """Returns why the meeting ended for the bot. Fills seen and emails as people show up."""
     started = last_sound = time.monotonic()
     alone_since: float | None = None
     media_lost_since: float | None = None
@@ -111,6 +117,7 @@ async def watch(
                 return "silence"
 
         names = await adapter.participant_names(page)
+        emails.update(await adapter.participant_emails(page))
         if set(names) - seen:
             seen.update(names)
             await reporter.event(EventKind.PARTICIPANTS, names=sorted(seen))
@@ -145,6 +152,10 @@ async def run(settings: BotSettings) -> int:
 
     recorder = Recorder(out_dir / "audio.ogg")
     seen: set[str] = set()
+    emails: dict[str, str] = {}
+    marks: list[dict[str, object]] = []
+    sampling_done = asyncio.Event()
+    sampler: asyncio.Task[None] | None = None
     page: Page | None = None
     exit_code = 0
     async with async_playwright() as playwright:
@@ -191,7 +202,18 @@ async def run(settings: BotSettings) -> int:
                 raise NotRecorded("notice_failed")
             recorder.start()
             await reporter.event(EventKind.RECORDING_STARTED)
-            reason = await watch(adapter, page, settings, stop, reporter, seen)
+            # Captions name whoever speaks; the pipeline uses them to name the transcript's
+            # speakers. Without them the meeting is still recorded.
+            try:
+                captions_on = await adapter.enable_captions(page)
+            except PlaywrightError:
+                captions_on = False
+            await reporter.event(EventKind.CAPTIONS, on=captions_on)
+            if captions_on:
+                sampler = asyncio.ensure_future(
+                    sample_speakers(adapter, page, recorder.started_at, seen, marks, sampling_done)
+                )
+            reason = await watch(adapter, page, settings, stop, reporter, seen, emails)
             await reporter.event(EventKind.MEETING_ENDED, reason=reason)
         except NotRecorded as outcome:
             exit_code = 2
@@ -207,7 +229,16 @@ async def run(settings: BotSettings) -> int:
                 await reporter.event(
                     EventKind.RECORDING_SAVED, seconds=round(seconds), bytes=audio.stat().st_size
                 )
-            (out_dir / "participants.json").write_text(json.dumps(sorted(seen)))
+            sampling_done.set()
+            if sampler is not None:
+                await sampler
+            (out_dir / "speaker_timeline.json").write_text(json.dumps(marks))
+            attendees = [
+                {"name": name, "email": emails.get(name)}
+                for name in sorted(seen)
+                if not PLACEHOLDER_NAME.match(name)
+            ]
+            (out_dir / "participants.json").write_text(json.dumps(attendees))
             if page is not None and not page.is_closed():
                 # Kept for every run that did not end well: bots often fail with a page that
                 # looks fine to the code, and the screenshot shows what the bot saw.

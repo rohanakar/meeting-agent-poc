@@ -122,6 +122,12 @@ export default function MeetingDetailPage() {
         <Fact label="Recording started" value={formatDate(meeting.started_at)} />
         <Fact label="Ended" value={formatDate(meeting.ended_at)} />
         <Fact
+          label="Attendees"
+          value={meeting.attendees
+            .map((attendee) => (attendee.email ? `${attendee.name} <${attendee.email}>` : attendee.name))
+            .join(", ")}
+        />
+        <Fact
           label="Metadata"
           value={Object.entries(meeting.metadata)
             .map(([key, value]) => `${key}: ${value}`)
@@ -246,7 +252,7 @@ export default function MeetingDetailPage() {
                 <li
                   key={segment.idx}
                   className={cn(
-                    "grid grid-cols-[3.5rem_9rem_1fr] gap-2 rounded px-1 py-0.5",
+                    "grid grid-cols-[3.5rem_11rem_1fr] gap-2 rounded px-1 py-0.5",
                     index === highlighted && "bg-accent",
                   )}
                 >
@@ -256,8 +262,13 @@ export default function MeetingDetailPage() {
                   >
                     {formatTimestamp(segment.start_ms)}
                   </button>
-                  <span className="truncate font-medium">
+                  <span className="truncate font-medium" title={segment.speaker_email ?? undefined}>
                     {segment.speaker_name ?? segment.speaker_label}
+                    {segment.speaker_email && (
+                      <span className="block truncate text-xs font-normal text-muted-foreground">
+                        {segment.speaker_email}
+                      </span>
+                    )}
                   </span>
                   <span>{segment.text}</span>
                 </li>
