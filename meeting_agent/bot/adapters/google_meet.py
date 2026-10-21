@@ -65,7 +65,12 @@ class GoogleMeet(MeetingAdapter):
         await chat_input.press("Enter")
 
     async def set_microphone(self, page: Page, on: bool) -> None:
-        await click_if_visible(page.locator(self.s["mic_on_button" if on else "mic_off_button"]))
+        # The button is named for what it does next: on means "Turn off microphone" is shown.
+        switch = page.locator(self.s["mic_on_button" if on else "mic_off_button"])
+        changed = page.locator(self.s["mic_off_button" if on else "mic_on_button"])
+        if not await is_visible(changed):
+            await click_if_visible(switch)
+            await changed.first.wait_for(timeout=5000)
 
     async def tile_name(self, tile: Locator) -> str:
         """A tile's name: its name label, else its accessible label, else the first line of its

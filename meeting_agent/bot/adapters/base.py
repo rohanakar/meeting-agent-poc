@@ -58,6 +58,8 @@ class MeetingAdapter:
         raise NotImplementedError
 
     async def set_microphone(self, page: Page, on: bool) -> None:
+        """Turns the bot's microphone on or off, and raises if the page does not show the change:
+        a click that misses leaves the notice playing into a muted microphone."""
         raise NotImplementedError
 
     async def participant_names(self, page: Page) -> list[str]:

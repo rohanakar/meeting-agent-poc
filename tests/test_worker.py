@@ -78,14 +78,11 @@ def fake_docker(monkeypatch: pytest.MonkeyPatch, exit_code: int, records: bool) 
 
 @pytest.fixture
 def account(monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The signed-in profile bot-login would have made, and the disclaimer the bot plays."""
+    """The signed-in profile bot-login would have made."""
     settings = get_settings()
     monkeypatch.setattr(settings, "bot_account_label", "notetaker")
     profile = settings.data_dir / "accounts" / "notetaker" / "profile"
     (profile / "Default").mkdir(parents=True, exist_ok=True)
-    disclaimer = settings.data_dir / "notice" / "disclaimer.mp3"
-    disclaimer.parent.mkdir(parents=True, exist_ok=True)
-    disclaimer.write_bytes(b"ID3 disclaimer")
     return profile
 
 
@@ -108,7 +105,7 @@ def test_run_bot_starts_the_signed_in_bot_and_queues_transcription(
     assert environment["BOT_PROFILE_DIR"] == str(account)
     assert environment["BOT_PROXY_URL"] == "http://user:pw@proxy.test:3128"
     assert environment["BOT_OUT_DIR"] == str(meeting_dir(meeting.id))
-    assert environment["BOT_NOTICE_AUDIO"].endswith("notice/disclaimer.mp3")
+    assert environment["BOT_NOTICE_AUDIO"].endswith("meeting_agent/bot/disclaimer.mp3")
     assert reload(db, meeting).status == "transcribing"
     assert reload(db, meeting).container_id == "container-1"
     [job] = get_queue(PIPELINE_QUEUE).jobs

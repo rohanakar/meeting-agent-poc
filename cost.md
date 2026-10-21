@@ -307,15 +307,23 @@ The test runs in the bot image (`meeting-agent:latest`), as user `bot`, through 
    ```python
    """One bot-like container: Chromium under Xvfb, audio to PulseAudio, ffmpeg recording the monitor.
    Usage: bench.py <blank|video|audio> <meetings> — each meeting is its own context (window)."""
+
    import asyncio, json, subprocess, sys, time
    from playwright.async_api import async_playwright
 
-   ARGS = ["--use-fake-ui-for-media-stream", "--autoplay-policy=no-user-gesture-required",
-           "--disable-blink-features=AutomationControlled", "--lang=en-US",
-           "--window-size=1280,720", "--disable-dev-shm-usage",
-           # Needed once one browser holds several meetings: windows behind others keep running.
-           "--disable-background-timer-throttling", "--disable-renderer-backgrounding",
-           "--disable-backgrounding-occluded-windows"]
+   ARGS = [
+       "--use-fake-ui-for-media-stream",
+       "--autoplay-policy=no-user-gesture-required",
+       "--disable-blink-features=AutomationControlled",
+       "--lang=en-US",
+       "--window-size=1280,720",
+       "--disable-dev-shm-usage",
+       # Needed once one browser holds several meetings: windows behind others keep running.
+       "--disable-background-timer-throttling",
+       "--disable-renderer-backgrounding",
+       "--disable-backgrounding-occluded-windows",
+   ]
+
 
    def cpu_usec() -> int:
        for line in open("/sys/fs/cgroup/cpu.stat"):
@@ -323,15 +331,41 @@ The test runs in the bot image (`meeting-agent:latest`), as user `bot`, through 
                return int(line.split()[1])
        raise RuntimeError("no cpu.stat")
 
+
    def memory() -> dict:
        stat = dict(line.split() for line in open("/sys/fs/cgroup/memory.stat"))
-       return {"current_mb": int(open("/sys/fs/cgroup/memory.current").read()) // 2**20,
-               "anon_mb": int(stat["anon"]) // 2**20, "shmem_mb": int(stat["shmem"]) // 2**20}
+       return {
+           "current_mb": int(open("/sys/fs/cgroup/memory.current").read()) // 2**20,
+           "anon_mb": int(stat["anon"]) // 2**20,
+           "shmem_mb": int(stat["shmem"]) // 2**20,
+       }
+
 
    async def main(mode: str, meetings: int) -> None:
-       recorder = subprocess.Popen(["ffmpeg", "-nostdin", "-loglevel", "error", "-y", "-f", "pulse",
-           "-i", "meeting_out.monitor", "-ac", "1", "-ar", "16000", "-c:a", "libopus", "-b:a", "32k",
-           "-application", "voip", "/tmp/out.ogg"])
+       recorder = subprocess.Popen(
+           [
+               "ffmpeg",
+               "-nostdin",
+               "-loglevel",
+               "error",
+               "-y",
+               "-f",
+               "pulse",
+               "-i",
+               "meeting_out.monitor",
+               "-ac",
+               "1",
+               "-ar",
+               "16000",
+               "-c:a",
+               "libopus",
+               "-b:a",
+               "32k",
+               "-application",
+               "voip",
+               "/tmp/out.ogg",
+           ]
+       )
        async with async_playwright() as playwright:
            browser = await playwright.chromium.launch(headless=False, args=ARGS)
            pages = []
@@ -346,18 +380,28 @@ The test runs in the bot image (`meeting-agent:latest`), as user `bot`, through 
            await asyncio.sleep(60)
            cpu_end, wall_end = cpu_usec(), time.monotonic()
            frames_end = [await frames(page, mode) for page in pages]
-           fps = [round((b - a) / (wall_end - wall_start), 1) for a, b in zip(frames_start, frames_end)]
-           result = {"mode": mode, "meetings": meetings,
-                     "cores": round((cpu_end - cpu_start) / 1e6 / (wall_end - wall_start), 3),
-                     "decoded_fps_per_meeting": fps, **memory()}
+           fps = [
+               round((b - a) / (wall_end - wall_start), 1) for a, b in zip(frames_start, frames_end)
+           ]
+           result = {
+               "mode": mode,
+               "meetings": meetings,
+               "cores": round((cpu_end - cpu_start) / 1e6 / (wall_end - wall_start), 3),
+               "decoded_fps_per_meeting": fps,
+               **memory(),
+           }
            await browser.close()
        recorder.terminate()
        print("RESULT " + json.dumps(result), flush=True)
 
+
    async def frames(page, mode: str) -> int:
        if mode != "video":
            return 0
-       return await page.evaluate("document.getElementById('m').getVideoPlaybackQuality().totalVideoFrames")
+       return await page.evaluate(
+           "document.getElementById('m').getVideoPlaybackQuality().totalVideoFrames"
+       )
+
 
    asyncio.run(main(sys.argv[1], int(sys.argv[2])))
    ```

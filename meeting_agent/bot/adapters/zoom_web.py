@@ -57,7 +57,12 @@ class ZoomWeb(MeetingAdapter):
 
     async def set_microphone(self, page: Page, on: bool) -> None:
         root = await client_root(page)
-        await click_if_visible(root.locator(self.s["unmute_button" if on else "mute_button"]))
+        # The button is named for what it does next: on means "mute my microphone" is shown.
+        switch = root.locator(self.s["unmute_button" if on else "mute_button"])
+        changed = root.locator(self.s["mute_button" if on else "unmute_button"])
+        if not await is_visible(changed):
+            await click_if_visible(switch)
+            await changed.first.wait_for(timeout=5000)
 
     async def participant_names(self, page: Page) -> list[str]:
         # The web client shows names only in a side panel; the footer count is enough to tell
