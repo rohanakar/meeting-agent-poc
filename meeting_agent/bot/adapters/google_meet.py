@@ -17,7 +17,8 @@ CAMERA_OFF_BUTTON = (
     '[role="button"][aria-label*="Turn off camera"], button[aria-label*="Turn off camera"]'
 )
 # Without a camera Meet names it "Ask to join without camera", so only the start is matched.
-JOIN_BUTTON = re.compile(r"^(Ask to join|Join now|Join anyway|Switch here)\b")
+# Never "Switch here": it moves the account's session in another browser into the bot's.
+JOIN_BUTTON = re.compile(r"^(Ask to join|Join now|Join anyway)\b")
 NO_DEVICES_BUTTON = re.compile(r"Continue without microphone and camera")
 LEAVE_BUTTON = 'button[aria-label="Leave call"]'
 CHAT_BUTTON = 'button[aria-label^="Chat with everyone"]'

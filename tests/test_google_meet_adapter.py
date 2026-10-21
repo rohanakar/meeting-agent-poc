@@ -10,5 +10,6 @@ def test_join_button_matches_meet_labels(label: str) -> None:
     assert JOIN_BUTTON.search(label)
 
 
-def test_join_button_ignores_other_buttons() -> None:
-    assert not JOIN_BUTTON.search("Other ways to join")
+@pytest.mark.parametrize("label", ["Other ways to join", "Switch here"])
+def test_join_button_ignores_other_buttons(label: str) -> None:
+    assert not JOIN_BUTTON.search(label)
