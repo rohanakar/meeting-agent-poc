@@ -2,8 +2,6 @@
 
 - direct: the host's own address.
 - proxy: Chromium's proxy, with WebRTC forced through it (see below).
-- tunnel: the worker starts the container inside the Tailscale container's network, so all
-  traffic, UDP included, already leaves through the exit node. Chromium needs nothing.
 """
 
 import json
@@ -13,6 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 from playwright.async_api import BrowserContext, ProxySettings
 
+from .. import strings
 from ..enums import EgressMode
 
 IP_ECHO_URL = "https://api.ipify.org?format=json"
@@ -61,7 +60,7 @@ def chromium_egress(
     if mode != EgressMode.PROXY:
         return None, {}
     if not proxy_url:
-        raise ValueError("Egress mode is proxy, but no proxy URL is set (EGRESS_PROXY_URL)")
+        raise ValueError(strings.NO_PROXY_URL)
     parts = urlsplit(proxy_url)
     proxy: ProxySettings = {"server": f"{parts.scheme}://{parts.hostname}:{parts.port}"}
     if parts.username:

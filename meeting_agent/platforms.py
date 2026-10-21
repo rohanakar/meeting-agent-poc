@@ -7,6 +7,8 @@ import re
 from enum import StrEnum
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+from . import strings
+
 
 class Platform(StrEnum):
     GOOGLE_MEET = "google_meet"
@@ -26,14 +28,12 @@ def detect_platform(url: str) -> Platform:
     parts = urlsplit(url.strip())
     host = (parts.hostname or "").lower()
     if parts.scheme != "https":
-        raise UnsupportedMeetingUrl("The meeting link must start with https://")
+        raise UnsupportedMeetingUrl(strings.LINK_NOT_HTTPS)
     if host == "meet.google.com" and MEET_PATH.match(parts.path):
         return Platform.GOOGLE_MEET
     if (host == "zoom.us" or host.endswith(".zoom.us")) and ZOOM_PATH.match(parts.path):
         return Platform.ZOOM
-    raise UnsupportedMeetingUrl(
-        "Only Google Meet (meet.google.com/xxx-xxxx-xxx) and Zoom (zoom.us/j/<id>) links work"
-    )
+    raise UnsupportedMeetingUrl(strings.LINK_NOT_SUPPORTED)
 
 
 def join_url(url: str) -> str:

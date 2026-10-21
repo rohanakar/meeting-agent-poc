@@ -1,8 +1,10 @@
 from pathlib import Path
+from typing import Any
 
 from anthropic import Anthropic
 from pydantic import BaseModel, Field
 
+from .. import strings
 from ..config import get_settings
 from ..models import TranscriptSegment
 
@@ -46,18 +48,27 @@ MIN_SUMMARY_WORDS = 15
 
 
 def summarize(
-    title: str, participants: list[str], segments: list[TranscriptSegment]
+    title: str,
+    participants: list[str],
+    segments: list[TranscriptSegment],
+    chat: list[dict[str, Any]],
 ) -> MeetingSummary:
+    """chat holds the bot's chat.json entries: {"t_ms", "sender", "text"}."""
     settings = get_settings()
     transcript = "\n".join(
         f"[S{segment.idx} {format_timestamp(segment.start_ms)}] "
         f"{segment.speaker_name or segment.speaker_label}: {segment.text}"
         for segment in segments
     )
-    content = (
-        f"Meeting title: {title}\n"
-        f"People seen in the meeting: {', '.join(participants) or 'not known'}\n\n"
-        f"<transcript>\n{transcript}\n</transcript>"
+    chat_lines = "\n".join(
+        f"[C{idx} {format_timestamp(message['t_ms'])}] {message['sender']}: {message['text']}"
+        for idx, message in enumerate(chat)
+    )
+    content = strings.SUMMARY_REQUEST.format(
+        title=title,
+        people=", ".join(participants) or strings.NOBODY_KNOWN,
+        transcript=transcript,
+        chat=chat_lines or strings.NO_CHAT,
     )
     client = Anthropic(
         api_key=settings.anthropic_api_key, base_url=settings.anthropic_base_url or None
@@ -72,7 +83,7 @@ def summarize(
             output_format=MeetingSummary,
         )
         if response.stop_reason == "refusal" or response.parsed_output is None:
-            raise SummaryRefused(f"No summary (stop reason {response.stop_reason})")
+            raise SummaryRefused(strings.NO_SUMMARY.format(reason=response.stop_reason))
         result = response.parsed_output
         if (
             transcript_words < MIN_TRANSCRIPT_WORDS

@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from .. import strings
 from ..db import get_session
 from ..enums import Admission, EventKind, MeetingStatus
 from ..models import BotEvent, Meeting
@@ -20,7 +21,7 @@ def add_event(
 ) -> None:
     meeting = session.get(Meeting, meeting_id)
     if meeting is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, strings.MEETING_NOT_FOUND)
     session.add(
         BotEvent(
             namespace=meeting.namespace, meeting_id=meeting_id, kind=body.kind, detail=body.detail

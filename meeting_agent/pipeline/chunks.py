@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from typing import Any
 
+from .. import strings
 from ..enums import ChunkKind
 from ..models import TranscriptSegment
 from .summarize import MeetingSummary, format_timestamp
@@ -51,12 +52,17 @@ def summary_chunks(summary: MeetingSummary, segments: list[TranscriptSegment]) -
     start_by_idx = {segment.idx: segment.start_ms for segment in segments}
     end_by_idx = {segment.idx: segment.end_ms for segment in segments}
     overview = "\n".join(
-        [summary.summary, *summary.key_points, *(f"Decision: {d}" for d in summary.decisions)]
+        [
+            summary.summary,
+            *summary.key_points,
+            *(strings.DECISION_LINE.format(decision=d) for d in summary.decisions),
+        ]
     )
     drafts = [ChunkDraft(kind=ChunkKind.SUMMARY, text=overview)]
     for item in summary.action_items:
         cited = [idx for idx in item.segment_ids if idx in start_by_idx]
-        parts = [item.text, f"Owner: {item.owner}" if item.owner else "", item.due or ""]
+        owner = strings.OWNER_LINE.format(owner=item.owner) if item.owner else ""
+        parts = [item.text, owner, item.due or ""]
         drafts.append(
             ChunkDraft(
                 kind=ChunkKind.ACTION_ITEM,

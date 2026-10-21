@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..enums import EgressMode, EventKind, Identity
+from ..enums import EgressMode, EventKind
 
 NAMESPACE_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,127}$"
 
@@ -15,7 +15,6 @@ class MeetingCreate(BaseModel):
     title: str = Field(min_length=1, max_length=500)
     join_at: datetime | None = None
     egress_mode: EgressMode | None = None
-    identity: Identity = Identity.ANONYMOUS
     metadata: dict[str, str] = Field(default_factory=dict)
 
 
@@ -32,7 +31,6 @@ class MeetingOut(BaseModel):
     started_at: datetime | None
     ended_at: datetime | None
     egress_mode: str
-    identity: str
     exit_ip: str | None
     admission: str | None
     failure_reason: str | None

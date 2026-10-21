@@ -10,6 +10,7 @@ from rq.job import Job
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from .. import strings
 from ..config import get_settings, meeting_dir
 from ..db import get_session
 from ..enums import TERMINAL_STATUSES, MeetingStatus
@@ -28,7 +29,7 @@ NamespaceQuery = Annotated[str, Query(pattern=NAMESPACE_PATTERN)]
 def get_meeting(session: Session, meeting_id: uuid.UUID, namespace: str) -> Meeting:
     meeting = session.get(Meeting, meeting_id)
     if meeting is None or meeting.namespace != namespace:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Meeting not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, strings.MEETING_NOT_FOUND)
     return meeting
 
 
@@ -46,7 +47,6 @@ def create_meeting(body: MeetingCreate, session: SessionDep) -> MeetingOut:
         title=body.title,
         join_at=body.join_at,
         egress_mode=body.egress_mode or settings.default_egress_mode,
-        identity=body.identity,
         meta=body.metadata,
     )
     session.add(meeting)
@@ -73,7 +73,7 @@ def list_meetings(
     platform: str | None = None,
     from_: Annotated[datetime | None, Query(alias="from")] = None,
     to: datetime | None = None,
-    metadata: Annotated[str | None, Query(description='JSON object, e.g. {"matter":"X"}')] = None,
+    metadata: Annotated[str | None, Query(description=strings.METADATA_QUERY_HELP)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> MeetingList:
@@ -91,7 +91,7 @@ def list_meetings(
             conditions.append(Meeting.meta.contains(json.loads(metadata)))
         except json.JSONDecodeError as error:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "metadata must be JSON"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, strings.METADATA_NOT_JSON
             ) from error
 
     total = session.scalar(select(func.count()).select_from(Meeting).where(*conditions)) or 0
@@ -146,7 +146,7 @@ def meeting_audio(
     get_meeting(session, meeting_id, namespace)
     path = meeting_dir(meeting_id) / "audio.ogg"
     if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "No recording for this meeting")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, strings.NO_RECORDING)
     return FileResponse(path, media_type="audio/ogg")
 
 
@@ -156,7 +156,9 @@ def stop_meeting(
 ) -> MeetingOut:
     meeting = get_meeting(session, meeting_id, namespace)
     if meeting.status in TERMINAL_STATUSES:
-        raise HTTPException(status.HTTP_409_CONFLICT, f"The meeting is already {meeting.status}")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, strings.MEETING_ALREADY_OVER.format(status=meeting.status)
+        )
     if meeting.status == MeetingStatus.SCHEDULED:
         # run_bot also checks the status when it starts, in case the cancel loses a race.
         meeting.status = MeetingStatus.CANCELLED

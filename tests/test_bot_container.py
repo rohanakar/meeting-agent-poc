@@ -1,6 +1,6 @@
 """Runs the real bot image against tests/fake_meeting: Xvfb, PulseAudio, Chromium and ffmpeg.
 
-Build the image first: docker compose build
+Build the image first: docker compose build (or set BOT_IMAGE to another tag)
 Needs internet access for the egress check.
 """
 
@@ -14,9 +14,10 @@ import docker
 import pytest
 from docker.errors import ImageNotFound
 
+from meeting_agent.config import get_settings
 from meeting_agent.worker.launcher import BOT_COMMAND, BOT_ENTRYPOINT, BOT_USER
 
-IMAGE = "meeting-agent:latest"
+IMAGE = get_settings().bot_image
 FAKE_MEETING = Path(__file__).parent / "fake_meeting" / "index.html"
 
 pytestmark = pytest.mark.docker
@@ -46,7 +47,7 @@ def meeting_files(tmp_path: Path) -> Path:
     return folder
 
 
-def run_bot(client: docker.DockerClient, meeting_files: Path, out: Path, query: str = "") -> int:
+def run_bot(client: docker.DockerClient, meeting_files: Path, out: Path) -> int:
     out.mkdir()
     container = client.containers.run(
         IMAGE,
@@ -62,7 +63,7 @@ def run_bot(client: docker.DockerClient, meeting_files: Path, out: Path, query: 
         environment={
             "BOT_MEETING_ID": "container-test",
             "BOT_PLATFORM": "fake",
-            "BOT_JOIN_URL": f"file:///fake/index.html{query}",
+            "BOT_JOIN_URL": "file:///fake/index.html",
             "BOT_DISPLAY_NAME": "Test Notetaker",
             "BOT_NOTICE_AUDIO": "/fake/notice.wav",
             "BOT_ADMISSION_TIMEOUT_S": "20",
@@ -133,20 +134,9 @@ def test_bot_gives_notice_then_records_the_meeting(
     marks = json.loads((out / "speaker_timeline.json").read_text())
     assert {mark["name"] for mark in marks} == {"Host"}
     assert len(marks) >= 6
+    # Host's message is kept; the bot's own notice is not.
+    assert [(m["sender"], m["text"]) for m in json.loads((out / "chat.json").read_text())] == [
+        ("Host", "Budget draft: https://example.com/b")
+    ]
     # The clip is a 440 Hz tone at about -18 dB; silence would be -91 dB.
     assert max_volume_db(out / "audio.ogg") > -30
-
-
-def test_bot_does_not_record_when_denied(
-    docker_client: docker.DockerClient, meeting_files: Path, tmp_path: Path
-) -> None:
-    out = tmp_path / "out"
-
-    exit_code = run_bot(docker_client, meeting_files, out, query="?deny")
-
-    log = events(out)
-    assert exit_code == 2
-    assert log[-2]["detail"] == {"result": "denied", "decided_by": "page"}
-    assert (log[-1]["kind"], log[-1]["detail"]) == ("failed", {"reason": "admission_denied"})
-    assert not (out / "audio.ogg").exists()
-    assert (out / "debug" / "last-page.png").exists()

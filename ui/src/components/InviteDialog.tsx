@@ -23,7 +23,6 @@ export function InviteDialog() {
   const [when, setWhen] = useState<"now" | "later">("now");
   const [joinAt, setJoinAt] = useState("");
   const [egressMode, setEgressMode] = useState("");
-  const [identity, setIdentity] = useState("anonymous");
   const [metadata, setMetadata] = useState<{ key: string; value: string }[]>([]);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -42,7 +41,6 @@ export function InviteDialog() {
           title,
           join_at: when === "later" && joinAt ? new Date(joinAt).toISOString() : null,
           egress_mode: egressMode || null,
-          identity,
           metadata: Object.fromEntries(
             metadata.filter((row) => row.key.trim()).map((row) => [row.key.trim(), row.value]),
           ),
@@ -115,31 +113,17 @@ export function InviteDialog() {
               )}
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="egress">Network egress</Label>
-              <Select
-                id="egress"
-                value={egressMode}
-                onChange={(event) => setEgressMode(event.target.value)}
-              >
-                <option value="">Server default</option>
-                <option value="direct">Direct</option>
-                <option value="proxy">Proxy</option>
-                <option value="tunnel">Tunnel (exit node)</option>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="identity">Bot identity</Label>
-              <Select
-                id="identity"
-                value={identity}
-                onChange={(event) => setIdentity(event.target.value)}
-              >
-                <option value="anonymous">Anonymous guest</option>
-                <option value="signed_in">Signed-in account</option>
-              </Select>
-            </div>
+          <div className="grid gap-2">
+            <Label htmlFor="egress">Network egress</Label>
+            <Select
+              id="egress"
+              value={egressMode}
+              onChange={(event) => setEgressMode(event.target.value)}
+            >
+              <option value="">Server default</option>
+              <option value="direct">Direct</option>
+              <option value="proxy">Proxy</option>
+            </Select>
           </div>
           <div className="grid gap-2">
             <div className="flex items-center justify-between">

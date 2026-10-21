@@ -14,9 +14,10 @@ from requests.exceptions import ReadTimeout
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from .. import strings
 from ..config import Settings, get_settings, meeting_dir
 from ..db import get_sessionmaker
-from ..enums import EventKind, Identity, MeetingStatus
+from ..enums import EventKind, MeetingStatus
 from ..models import ActionItem, BotEvent, Chunk, Meeting, Summary, TranscriptSegment
 from ..pipeline.chunks import summary_chunks, transcript_chunks
 from ..pipeline.embed import embed_texts
@@ -49,16 +50,12 @@ def run_bot(meeting_id: str) -> None:
         if meeting is None or meeting.status != MeetingStatus.SCHEDULED:
             # Cancelled from the UI while it waited in the queue.
             return
-        profile_dir = None
-        if meeting.identity == Identity.SIGNED_IN:
-            profile_dir = settings.data_dir / "accounts" / settings.bot_account_label / "profile"
-            if not settings.bot_account_label or not (profile_dir / "Default").is_dir():
-                meeting.status = MeetingStatus.FAILED
-                meeting.failure_reason = (
-                    "No signed-in bot account: run docker compose --profile login up bot-login"
-                )
-                session.commit()
-                return
+        profile_dir = settings.data_dir / "accounts" / settings.bot_account_label / "profile"
+        if not settings.bot_account_label or not (profile_dir / "Default").is_dir():
+            meeting.status = MeetingStatus.FAILED
+            meeting.failure_reason = strings.NO_BOT_ACCOUNT
+            session.commit()
+            return
         container = start_bot(meeting, settings, notice_audio(settings), profile_dir)
         meeting.container_id = container.id
         meeting.status = MeetingStatus.JOINING
@@ -86,7 +83,7 @@ def run_bot(meeting_id: str) -> None:
             )
             return
         meeting.status = MeetingStatus.FAILED
-        meeting.failure_reason = meeting.failure_reason or f"The bot exited with code {exit_code}"
+        meeting.failure_reason = meeting.failure_reason or strings.BOT_EXITED.format(code=exit_code)
         session.commit()
 
 
@@ -135,11 +132,11 @@ def transcribe(meeting_id: str) -> None:
         if volume < SILENCE_DB:
             # The bot can look healthy and still hear nothing, e.g. when the platform never
             # connected its audio. Say so instead of summarising silence.
-            fail(meeting_id, f"The recording is silent (max {volume} dB)")
+            fail(meeting_id, strings.SILENT_RECORDING.format(volume=volume))
             return
         turns = transcribe_file(audio)
     except Exception as error:
-        fail(meeting_id, f"Transcription failed: {error!r}"[:500])
+        fail(meeting_id, strings.TRANSCRIPTION_FAILED.format(error=error)[:500])
         raise
 
     # The speaker map: ElevenLabs' labels to the names (and emails) the bot saw in the meeting.
@@ -178,7 +175,7 @@ def transcribe(meeting_id: str) -> None:
         )
         if not turns:
             meeting.status = MeetingStatus.FAILED
-            meeting.failure_reason = "No speech was found in the recording"
+            meeting.failure_reason = strings.NO_SPEECH
             session.commit()
             return
         meeting.status = MeetingStatus.PROCESSING
@@ -205,7 +202,9 @@ def process(meeting_id: str) -> None:
                 else attendee["name"]
                 for attendee in meeting.attendees
             ]
-            result = summarize(meeting.title, people, segments)
+            # What people typed in the meeting's chat, in the order the bot saw it.
+            chat = read_json(meeting_dir(meeting_id) / "chat.json")
+            result = summarize(meeting.title, people, segments, chat)
 
             # Claude names only the speakers the captions left anonymous.
             names = {speaker.label: speaker.name for speaker in result.speakers if speaker.name}
@@ -263,5 +262,5 @@ def process(meeting_id: str) -> None:
             )
             session.commit()
     except Exception as error:
-        fail(meeting_id, f"Processing failed: {error!r}"[:500])
+        fail(meeting_id, strings.PROCESSING_FAILED.format(error=error)[:500])
         raise

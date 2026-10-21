@@ -116,7 +116,6 @@ export default function MeetingDetailPage() {
       <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Fact label="Platform" value={meeting.platform === "google_meet" ? "Google Meet" : "Zoom"} />
         <Fact label="Egress" value={meeting.egress_mode} />
-        <Fact label="Identity" value={meeting.identity.replace("_", " ")} />
         <Fact label="Exit IP" value={meeting.exit_ip} />
         <Fact label="Admission" value={meeting.admission} />
         <Fact label="Recording started" value={formatDate(meeting.started_at)} />

@@ -9,6 +9,7 @@ from pathlib import Path
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import FrameLocator, Locator, Page
 
+from ... import strings
 from ...enums import Admission
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,18 @@ Root = Page | FrameLocator
 # CSS selectors are strings; texts and accessible names to match are patterns.
 Selectors = dict[str, str | re.Pattern[str]]
 
-# Tips and pop-ups that cover controls: only buttons with these labels are clicked, so no meeting
-# control is ever pressed by accident. Not "Close": Meet's chat panel has one, and closing it
-# made the chat notice fail on its retry.
-DISMISS_BUTTON = re.compile(
-    r"^(Got it|Dismiss|Not now|No thanks|OK|Skip|Maybe later|I understand)$", re.IGNORECASE
-)
+# Runs on every chat message element. The sender is the text of the message group's header
+# without its time, so it is empty for the bot's own messages, which carry no name.
+READ_CHAT = """(messages, [text, group, sender, time]) => messages.map((message, index) => {
+    const box = message.closest(group);
+    const name = box?.querySelector(sender)?.innerText ?? "";
+    const stamp = box?.querySelector(time)?.innerText ?? "";
+    return {
+        id: message.getAttribute("data-message-id") || message.id || String(index),
+        sender: (stamp ? name.replace(stamp, "") : name).trim(),
+        text: (message.querySelector(text) ?? message).innerText.trim(),
+    };
+})"""
 
 
 class MeetingAdapter:
@@ -79,6 +86,11 @@ class MeetingAdapter:
         """The caption area's text: each speaker's name on a line, then what they said."""
         return None
 
+    async def chat_messages(self, page: Page) -> list[dict[str, str]]:
+        """What the chat panel shows, oldest first: {"id", "sender", "text"} per message. The
+        panel is the one the chat notice opened. Empty when the platform's chat is not read."""
+        return []
+
     async def leave(self, page: Page) -> None:
         raise NotImplementedError
 
@@ -119,11 +131,19 @@ async def click_if_visible(locator: Locator) -> bool:
     return False
 
 
+async def read_chat(root: Root, selectors: Selectors) -> list[dict[str, str]]:
+    """Every chat message on the page, read in one call (see READ_CHAT)."""
+    keys = ("chat_message_text", "chat_group", "chat_sender", "chat_time")
+    return await root.locator(selectors["chat_message"]).evaluate_all(
+        READ_CHAT, [selectors[key] for key in keys]
+    )
+
+
 async def clear_overlays(page: Page) -> int:
     """Closes tips and pop-ups in the page and its frames. Returns how many it closed."""
     closed = 0
     for frame in page.frames:
-        buttons = frame.get_by_role("button", name=DISMISS_BUTTON)
+        buttons = frame.get_by_role("button", name=strings.DISMISS_BUTTON)
         try:
             for button in await buttons.all():
                 if await button.is_visible():
@@ -166,7 +186,3 @@ def looks_like_name(line: str) -> bool:
 
 
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
-
-
-def any_text(*phrases: str) -> re.Pattern[str]:
-    return re.compile("|".join(re.escape(phrase) for phrase in phrases), re.IGNORECASE)

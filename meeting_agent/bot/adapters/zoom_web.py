@@ -1,50 +1,18 @@
-import re
-
 from playwright.async_api import Page
 
+from ... import strings
 from ...enums import Admission
-from .base import MeetingAdapter, Root, any_text, click_if_visible, is_visible, poll_admission
-
-# The client draws the meeting either in the page or in an iframe with this id.
-CLIENT_FRAME = "iframe#webclient"
+from .base import MeetingAdapter, Root, click_if_visible, is_visible, poll_admission, read_chat
 
 
 async def client_root(page: Page) -> Root:
-    if await page.locator(CLIENT_FRAME).count():
-        return page.frame_locator(CLIENT_FRAME)
+    if await page.locator(strings.ZOOM_CLIENT_FRAME).count():
+        return page.frame_locator(strings.ZOOM_CLIENT_FRAME)
     return page
 
 
 class ZoomWeb(MeetingAdapter):
-    # Zoom web client (app.zoom.us/wc) as of October 2026, English UI. Replace any of them in
-    # <selectors folder>/zoom.json when Zoom changes, without a rebuild.
-    DEFAULT_SELECTORS = {
-        "cookie_accept": "#onetrust-accept-btn-handler",
-        "name_input": "#input-for-name",
-        "agree_button": re.compile(r"^I Agree$"),
-        "preview_mute_button": re.compile(r"^Mute$"),
-        "preview_stop_video_button": re.compile(r"^Stop Video$"),
-        "join_button": re.compile(r"^Join$"),
-        "join_audio_button": re.compile(r"Join Audio by Computer"),
-        "leave_button": 'button[aria-label="Leave"], button.footer__leave-btn',
-        "leave_confirm_button": re.compile(r"^Leave Meeting$"),
-        "chat_button": 'button[aria-label*="chat panel" i]',
-        "chat_input": (
-            '.chat-rtf-box__editor-outer [contenteditable="true"], textarea.chat-box__chat-textarea'
-        ),
-        "unmute_button": 'button[aria-label="unmute my microphone"]',
-        "mute_button": 'button[aria-label="mute my microphone"]',
-        "participant_count": ".footer-button__number-counter",
-        "denied_text": any_text("removed you from the waiting room", "You have been removed"),
-        "blocked_text": any_text(
-            "This meeting link is invalid", "Passcode wrong", "This meeting ID is not valid"
-        ),
-        "ended_text": any_text(
-            "This meeting has been ended by host",
-            "The meeting has been ended",
-            "You have been removed from this meeting",
-        ),
-    }
+    DEFAULT_SELECTORS = strings.ZOOM_SELECTORS
 
     async def join(self, page: Page, display_name: str) -> None:
         await page.wait_for_load_state("domcontentloaded")
@@ -101,7 +69,10 @@ class ZoomWeb(MeetingAdapter):
         text = (await counter.inner_text()).strip()
         if not text.isdigit():
             return []
-        return [f"Participant {number}" for number in range(1, int(text) + 1)]
+        return [strings.PLACEHOLDER_NAME.format(number=n) for n in range(1, int(text) + 1)]
+
+    async def chat_messages(self, page: Page) -> list[dict[str, str]]:
+        return await read_chat(await client_root(page), self.s)
 
     async def ended_reason(self, page: Page) -> str | None:
         if page.is_closed():

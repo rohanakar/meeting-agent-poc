@@ -11,7 +11,6 @@ no notice, stopped first), 1 the bot failed. A partial recording is kept in ever
 import asyncio
 import json
 import logging
-import re
 import signal
 import sys
 import time
@@ -19,6 +18,7 @@ import time
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page, async_playwright
 
+from .. import strings
 from ..config import BotSettings
 from ..enums import Admission, EgressMode, EventKind
 from .adapters import ADAPTERS, MeetingAdapter
@@ -42,8 +42,6 @@ SPEECH_ENERGY_PER_POLL = 1e-3
 # A chat notice that failed is tried again this often, this many times, while the bot records.
 CHAT_RETRY_S = 30
 CHAT_RETRIES = 4
-# Names the bot makes up for tiles without a label; they count people but name nobody.
-PLACEHOLDER_NAME = re.compile(r"^Participant \d+$")
 
 
 class NotRecorded(Exception):
@@ -91,10 +89,13 @@ async def watch(
     seen: set[str],
     emails: dict[str, str],
     me: dict[str, str],
+    chat: dict[str, dict[str, object]],
+    recording_started: float,
     chat_pending: bool,
 ) -> str:
-    """Returns why the meeting ended for the bot. Fills seen and emails as people show up, and
-    posts the chat notice if it could not be posted before the recording started."""
+    """Returns why the meeting ended for the bot. Fills seen and emails as people show up, adds
+    new chat messages to chat, and posts the chat notice if it could not be posted before the
+    recording started."""
     started = last_sound = time.monotonic()
     chat_tries = 0
     next_chat_try = started + CHAT_RETRY_S
@@ -135,10 +136,11 @@ async def watch(
             if now - last_sound > settings.silence_timeout_s:
                 return "silence"
 
+        await collect_chat(adapter, page, settings, chat, recording_started)
         names = await adapter.participant_names(page)
         emails.update(await adapter.participant_emails(page))
         if "name" not in me:
-            # Anonymous, the bot's tile carries the configured name; signed in, the account's.
+            # Zoom shows the configured name on the bot's tile; Meet shows the account's.
             own = settings.display_name if settings.display_name in names else None
             if own or (own := await adapter.own_name(page)):
                 me["name"] = own
@@ -166,6 +168,31 @@ async def watch(
             pass
 
 
+async def collect_chat(
+    adapter: MeetingAdapter,
+    page: Page,
+    settings: BotSettings,
+    chat: dict[str, dict[str, object]],
+    recording_started: float,
+) -> None:
+    """Adds the chat messages not seen before, timed on the recording's clock. The bot's own
+    messages (no sender, or the notice) are left out."""
+    try:
+        messages = await adapter.chat_messages(page)
+    except PlaywrightError as error:
+        logger.warning("could not read the chat: %r", error)
+        return
+    t_ms = round((time.monotonic() - recording_started) * 1000)
+    for message in messages:
+        own = not message["sender"] or message["text"] == settings.notice_text.strip()
+        if not own and message["id"] not in chat:
+            chat[message["id"]] = {
+                "t_ms": t_ms,
+                "sender": message["sender"],
+                "text": message["text"],
+            }
+
+
 async def run(settings: BotSettings) -> int:
     out_dir = settings.out_dir
     (out_dir / "debug").mkdir(parents=True, exist_ok=True)
@@ -182,6 +209,7 @@ async def run(settings: BotSettings) -> int:
     seen: set[str] = set()
     emails: dict[str, str] = {}
     me: dict[str, str] = {}
+    chat: dict[str, dict[str, object]] = {}
     marks: list[dict[str, object]] = []
     sampling_done = asyncio.Event()
     sampler: asyncio.Task[None] | None = None
@@ -194,7 +222,6 @@ async def run(settings: BotSettings) -> int:
                 EventKind.LAUNCHED,
                 platform=settings.platform,
                 egress_mode=settings.egress_mode,
-                signed_in=bool(settings.profile_dir),
             )
             egress = await check_egress(context)
             await reporter.event(
@@ -244,7 +271,17 @@ async def run(settings: BotSettings) -> int:
                     sample_speakers(adapter, page, recorder.started_at, seen, marks, sampling_done)
                 )
             reason = await watch(
-                adapter, page, settings, stop, reporter, seen, emails, me, chat_pending=not posted
+                adapter,
+                page,
+                settings,
+                stop,
+                reporter,
+                seen,
+                emails,
+                me,
+                chat,
+                recorder.started_at,
+                chat_pending=not posted,
             )
             await reporter.event(EventKind.MEETING_ENDED, reason=reason)
         except NotRecorded as outcome:
@@ -265,14 +302,16 @@ async def run(settings: BotSettings) -> int:
             if sampler is not None:
                 await sampler
             (out_dir / "speaker_timeline.json").write_text(json.dumps(marks))
-            # The bot is an attendee too, marked so nobody takes it for a person.
+            (out_dir / "chat.json").write_text(json.dumps(list(chat.values())))
             attendees = [
                 {
-                    "name": f"{name} [BOT]" if name == me.get("name") else name,
+                    "name": strings.BOT_ATTENDEE.format(name=name)
+                    if name == me.get("name")
+                    else name,
                     "email": emails.get(name),
                 }
                 for name in sorted(seen)
-                if not PLACEHOLDER_NAME.match(name)
+                if not strings.PLACEHOLDER_NAME_PATTERN.match(name)
             ]
             (out_dir / "participants.json").write_text(json.dumps(attendees))
             if page is not None and not page.is_closed():

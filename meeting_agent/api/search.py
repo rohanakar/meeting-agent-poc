@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
+from .. import strings
 from ..db import get_session
 from ..enums import ChunkKind
 from ..models import Chunk, Meeting
@@ -25,7 +26,7 @@ def search(
     platform: str | None = None,
     from_: Annotated[datetime | None, Query(alias="from")] = None,
     to: datetime | None = None,
-    metadata: Annotated[str | None, Query(description='JSON object, e.g. {"matter":"X"}')] = None,
+    metadata: Annotated[str | None, Query(description=strings.METADATA_QUERY_HELP)] = None,
     limit: Annotated[int, Query(ge=1, le=50)] = 10,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> SearchResults:
@@ -43,7 +44,7 @@ def search(
             conditions.append(Meeting.meta.contains(json.loads(metadata)))
         except json.JSONDecodeError as error:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_CONTENT, "metadata must be JSON"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, strings.METADATA_NOT_JSON
             ) from error
 
     [query_embedding] = embed_texts([q])

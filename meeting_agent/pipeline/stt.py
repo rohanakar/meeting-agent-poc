@@ -10,6 +10,7 @@ from pathlib import Path
 from elevenlabs import ElevenLabs
 from elevenlabs.types import SpeechToTextChunkResponseModel, SpeechToTextWordResponseModel
 
+from .. import strings
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def transcribe_file(path: Path) -> list[Turn]:
     )
     # Multichannel and deferred responses come back only when asked for, and this never asks.
     if not isinstance(response, SpeechToTextChunkResponseModel):
-        raise ValueError("Transcription returned a multichannel or deferred response")
+        raise ValueError(strings.UNEXPECTED_TRANSCRIPT)
     return group_turns(response.words)
 
 

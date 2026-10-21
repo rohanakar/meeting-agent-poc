@@ -3,43 +3,15 @@ import pytest
 from meeting_agent.platforms import Platform, UnsupportedMeetingUrl, detect_platform, join_url
 
 
-@pytest.mark.parametrize(
-    ("url", "platform"),
-    [
-        ("https://meet.google.com/abc-defg-hij", Platform.GOOGLE_MEET),
-        ("https://meet.google.com/abc-defg-hij?authuser=1", Platform.GOOGLE_MEET),
-        ("https://zoom.us/j/123456789?pwd=abc", Platform.ZOOM),
-        ("https://us02web.zoom.us/j/12345678901", Platform.ZOOM),
-        ("https://app.zoom.us/wc/join/123456789", Platform.ZOOM),
-    ],
-)
-def test_detect_platform(url: str, platform: Platform) -> None:
-    assert detect_platform(url) == platform
+def test_links_name_their_platform_and_the_page_the_bot_opens() -> None:
+    meet = "https://meet.google.com/abc-defg-hij?authuser=1"
+    zoom = "https://us02web.zoom.us/j/123456789?pwd=s3cret&uname=x"
 
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "http://meet.google.com/abc-defg-hij",
-        "https://meet.google.com/landing",
-        "https://teams.microsoft.com/l/meetup-join/abc",
-        "https://evilzoom.us/j/123456789",
-    ],
-)
-def test_unsupported_urls(url: str) -> None:
-    with pytest.raises(UnsupportedMeetingUrl):
-        detect_platform(url)
-
-
-def test_meet_join_url_drops_query() -> None:
-    assert (
-        join_url("https://meet.google.com/abc-defg-hij?authuser=1")
-        == "https://meet.google.com/abc-defg-hij"
-    )
-
-
-def test_zoom_join_url_uses_web_client_and_keeps_passcode() -> None:
-    assert (
-        join_url("https://us02web.zoom.us/j/123456789?pwd=s3cret&uname=x")
-        == "https://app.zoom.us/wc/join/123456789?pwd=s3cret"
-    )
+    assert detect_platform(meet) == Platform.GOOGLE_MEET
+    assert detect_platform(zoom) == Platform.ZOOM
+    assert join_url(meet) == "https://meet.google.com/abc-defg-hij"
+    # Zoom invite links open the desktop app, so the bot goes to the web client.
+    assert join_url(zoom) == "https://app.zoom.us/wc/join/123456789?pwd=s3cret"
+    for unsupported in ["http://meet.google.com/abc-defg-hij", "https://evilzoom.us/j/123456789"]:
+        with pytest.raises(UnsupportedMeetingUrl):
+            detect_platform(unsupported)

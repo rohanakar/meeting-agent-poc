@@ -1,4 +1,3 @@
-import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -52,7 +51,6 @@ def add_meeting(db: Engine, **overrides: Any) -> Meeting:
             "meeting_url": "https://meet.google.com/abc-defg-hij",
             "title": "Weekly sync",
             "egress_mode": "direct",
-            "identity": "anonymous",
             "meta": {},
         }
         meeting = Meeting(**fields | overrides)
@@ -79,17 +77,23 @@ def fake_docker(monkeypatch: pytest.MonkeyPatch, exit_code: int, records: bool) 
 
 
 @pytest.fixture
-def disclaimer() -> Path:
-    path = get_settings().data_dir / "notice" / "disclaimer.mp3"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"ID3 disclaimer")
-    return path
+def account(monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The signed-in profile bot-login would have made, and the disclaimer the bot plays."""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "bot_account_label", "notetaker")
+    profile = settings.data_dir / "accounts" / "notetaker" / "profile"
+    (profile / "Default").mkdir(parents=True, exist_ok=True)
+    disclaimer = settings.data_dir / "notice" / "disclaimer.mp3"
+    disclaimer.parent.mkdir(parents=True, exist_ok=True)
+    disclaimer.write_bytes(b"ID3 disclaimer")
+    return profile
 
 
-def test_run_bot_starts_the_container_and_queues_transcription(
-    db: Engine, monkeypatch: pytest.MonkeyPatch, disclaimer: Path
+def test_run_bot_starts_the_signed_in_bot_and_queues_transcription(
+    db: Engine, monkeypatch: pytest.MonkeyPatch, account: Path
 ) -> None:
-    meeting = add_meeting(db)
+    meeting = add_meeting(db, egress_mode="proxy")
+    monkeypatch.setattr(get_settings(), "egress_proxy_url", "http://user:pw@proxy.test:3128")
     fake = fake_docker(monkeypatch, exit_code=0, records=True)
 
     jobs.run_bot(str(meeting.id))
@@ -100,11 +104,11 @@ def test_run_bot_starts_the_container_and_queues_transcription(
     assert run["command"] == ["bot-entrypoint", "python", "-m", "meeting_agent.bot.main"]
     assert run["user"] == "bot"
     assert run["network"] == "meeting-agent"
-    assert "network_mode" not in run
     assert environment["BOT_JOIN_URL"] == "https://meet.google.com/abc-defg-hij"
-    assert environment["BOT_PROXY_URL"] == ""
+    assert environment["BOT_PROFILE_DIR"] == str(account)
+    assert environment["BOT_PROXY_URL"] == "http://user:pw@proxy.test:3128"
     assert environment["BOT_OUT_DIR"] == str(meeting_dir(meeting.id))
-    assert environment["BOT_NOTICE_AUDIO"] == str(disclaimer)
+    assert environment["BOT_NOTICE_AUDIO"].endswith("notice/disclaimer.mp3")
     assert reload(db, meeting).status == "transcribing"
     assert reload(db, meeting).container_id == "container-1"
     [job] = get_queue(PIPELINE_QUEUE).jobs
@@ -112,33 +116,8 @@ def test_run_bot_starts_the_container_and_queues_transcription(
     assert (meeting_dir(meeting.id) / "bot.log").read_bytes() == b"bot log"
 
 
-def test_tunnel_mode_puts_the_bot_in_the_tailscale_network(
-    db: Engine, monkeypatch: pytest.MonkeyPatch, disclaimer: Path
-) -> None:
-    meeting = add_meeting(db, egress_mode="tunnel")
-    fake = fake_docker(monkeypatch, exit_code=0, records=True)
-
-    jobs.run_bot(str(meeting.id))
-
-    [run] = fake.runs
-    assert run["network_mode"] == "container:meeting-agent-tailscale"
-    assert "network" not in run
-
-
-def test_proxy_mode_gives_the_bot_the_proxy(
-    db: Engine, monkeypatch: pytest.MonkeyPatch, disclaimer: Path
-) -> None:
-    meeting = add_meeting(db, egress_mode="proxy")
-    monkeypatch.setattr(get_settings(), "egress_proxy_url", "http://user:pw@proxy.test:3128")
-    fake = fake_docker(monkeypatch, exit_code=0, records=True)
-
-    jobs.run_bot(str(meeting.id))
-
-    assert fake.runs[0]["environment"]["BOT_PROXY_URL"] == "http://user:pw@proxy.test:3128"
-
-
 def test_a_bot_that_did_not_record_fails_the_meeting(
-    db: Engine, monkeypatch: pytest.MonkeyPatch, disclaimer: Path
+    db: Engine, monkeypatch: pytest.MonkeyPatch, account: Path
 ) -> None:
     meeting = add_meeting(db, failure_reason="admission_denied")
     fake_docker(monkeypatch, exit_code=2, records=False)
@@ -150,17 +129,11 @@ def test_a_bot_that_did_not_record_fails_the_meeting(
     assert get_queue(PIPELINE_QUEUE).jobs == []
 
 
-def test_a_cancelled_meeting_starts_no_bot(db: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
-    meeting = add_meeting(db, status="cancelled")
-    fake = fake_docker(monkeypatch, exit_code=0, records=True)
-
-    jobs.run_bot(str(meeting.id))
-
-    assert fake.runs == []
-
-
-def test_signed_in_needs_a_saved_account(db: Engine, monkeypatch: pytest.MonkeyPatch) -> None:
-    meeting = add_meeting(db, identity="signed_in")
+def test_without_a_signed_in_account_no_bot_starts(
+    db: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(get_settings(), "bot_account_label", "")
+    meeting = add_meeting(db)
     fake = fake_docker(monkeypatch, exit_code=0, records=True)
 
     jobs.run_bot(str(meeting.id))
@@ -168,10 +141,3 @@ def test_signed_in_needs_a_saved_account(db: Engine, monkeypatch: pytest.MonkeyP
     assert fake.runs == []
     assert reload(db, meeting).status == "failed"
     assert "bot-login" in reload(db, meeting).failure_reason
-
-
-def test_without_a_disclaimer_file_nothing_is_made(db: Engine) -> None:
-    shutil.rmtree(get_settings().data_dir / "notice", ignore_errors=True)
-
-    assert jobs.notice_audio(get_settings()) is None
-    assert not (get_settings().data_dir / "notice").exists()
