@@ -121,6 +121,10 @@ async def watch(
         if set(names) - seen:
             seen.update(names)
             await reporter.event(EventKind.PARTICIPANTS, names=sorted(seen))
+            # The page as it was when the list changed: when a tile's name cannot be read,
+            # this shows where the platform put it.
+            await page.screenshot(path=settings.out_dir / "debug" / "in-call.png")
+            (settings.out_dir / "debug" / "in-call.html").write_text(await page.content())
         # One participant is the bot itself. An empty list means the page did not say, which
         # leaves the timer as it is: it used to restart it, and the bot then never left.
         if len(names) == 1:

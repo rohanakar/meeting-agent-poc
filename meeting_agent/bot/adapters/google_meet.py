@@ -1,7 +1,7 @@
 import re
 
 from playwright.async_api import Error as PlaywrightError
-from playwright.async_api import Page
+from playwright.async_api import Locator, Page
 
 from ...enums import Admission
 from .base import (
@@ -10,6 +10,7 @@ from .base import (
     any_text,
     click_if_visible,
     is_visible,
+    looks_like_name,
     poll_admission,
 )
 
@@ -46,6 +47,8 @@ class GoogleMeet(MeetingAdapter):
         ),
         "participant_tile": "[data-participant-id]",
         "participant_name": "span.notranslate",
+        # Tiles that show a shared screen, not a person.
+        "presentation_text": any_text("Presentation", "is presenting", "You are presenting"),
         "captions_button": re.compile(r"^Turn on captions"),
         "captions_region": '[role="region"][aria-label*="Captions" i]',
         "denied_text": any_text("denied your request to join"),
@@ -111,6 +114,21 @@ class GoogleMeet(MeetingAdapter):
     async def set_microphone(self, page: Page, on: bool) -> None:
         await click_if_visible(page.locator(self.s["mic_on_button" if on else "mic_off_button"]))
 
+    async def tile_name(self, tile: Locator) -> str:
+        """A tile's name: its name label, else its accessible label, else the first line of its
+        text that reads like a name. The label is not in the same place on every tile (camera
+        on or off, host, the bot's own tile)."""
+        label = tile.locator(self.s["participant_name"]).first
+        if await label.count():
+            name = (await label.inner_text()).strip()
+            if name:
+                return name
+        aria_label = (await tile.get_attribute("aria-label") or "").strip()
+        if aria_label and looks_like_name(aria_label):
+            return aria_label
+        lines = (await tile.inner_text()).splitlines()
+        return next((line.strip() for line in lines if looks_like_name(line.strip())), "")
+
     async def participant_names(self, page: Page) -> list[str]:
         # One entry per participant id: a tile and its inner parts can carry the same id.
         names: dict[str, str] = {}
@@ -118,8 +136,9 @@ class GoogleMeet(MeetingAdapter):
             participant_id = await tile.get_attribute("data-participant-id")
             if not participant_id or participant_id in names:
                 continue
-            label = tile.locator(self.s["participant_name"]).first
-            name = (await label.inner_text()).strip() if await label.count() else ""
+            if await tile.get_by_text(self.s["presentation_text"]).count():
+                continue
+            name = await self.tile_name(tile)
             names[participant_id] = name or f"Participant {len(names) + 1}"
         return sorted(names.values())
 
@@ -127,10 +146,7 @@ class GoogleMeet(MeetingAdapter):
         # Meet seldom puts an email in a tile; when it does (a label, a tooltip), keep it.
         emails: dict[str, str] = {}
         for tile in await page.locator(self.s["participant_tile"]).all():
-            label = tile.locator(self.s["participant_name"]).first
-            if not await label.count():
-                continue
-            name = (await label.inner_text()).strip()
+            name = await self.tile_name(tile)
             found = EMAIL.search(await tile.inner_html())
             if name and found:
                 emails[name] = found.group(0)

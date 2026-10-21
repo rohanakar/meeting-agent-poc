@@ -154,6 +154,11 @@ async def poll_admission(
     return Admission.TIMEOUT
 
 
+def looks_like_name(line: str) -> bool:
+    words = line.split()
+    return 1 <= len(words) <= 4 and line[-1] not in ".?!,;:" and all(w[:1].isupper() for w in words)
+
+
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 
 

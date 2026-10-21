@@ -27,6 +27,15 @@ def test_without_known_names_short_title_case_lines_are_speakers() -> None:
     assert parse_captions("Anna Kumar\nhello there.", []) == [("Anna Kumar", "hello there.")]
 
 
+def test_a_full_name_missing_from_the_tiles_still_starts_a_block() -> None:
+    text = "Vamshi Gangadhar\nsounds good\nRishabh C\nlet us send it\nOkay"
+
+    assert parse_captions(text, ["Vamshi Gangadhar"]) == [
+        ("Vamshi Gangadhar", "sounds good"),
+        ("Rishabh C", "let us send it Okay"),
+    ]
+
+
 def test_only_new_or_growing_blocks_are_speaking() -> None:
     before = [("Anna", "Hello"), ("Ben", "Yes")]
     after = [("Anna", "Hello"), ("Ben", "Yes I agree")]

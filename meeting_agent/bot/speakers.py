@@ -13,7 +13,7 @@ from collections.abc import Iterable
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
-from .adapters.base import MeetingAdapter
+from .adapters.base import MeetingAdapter, looks_like_name
 
 logger = logging.getLogger(__name__)
 
@@ -22,16 +22,13 @@ SAMPLE_S = 0.5
 SELF_LABEL = "you"
 
 
-def looks_like_name(line: str) -> bool:
-    words = line.split()
-    return 1 <= len(words) <= 4 and line[-1] not in ".?!,;:" and all(w[:1].isupper() for w in words)
-
-
 def parse_captions(text: str, known_names: Iterable[str]) -> list[tuple[str, str]]:
     """The caption area's text as (speaker, words) blocks.
 
-    A line is a speaker's name when it is a participant's name or "You"; when no names are
-    known yet, a short line in title case is taken as one. Other lines are what was said.
+    A line is a speaker's name when it is a participant's name or "You", or when it reads like
+    a full name (two to four words in title case, no closing punctuation): the bot may not have
+    read that person's tile. A single word counts only while no names are known, since one
+    capitalised word is often speech. Other lines are what was said.
     """
     known = {name.casefold(): name for name in known_names}
     blocks: list[list[str]] = []
@@ -39,7 +36,8 @@ def parse_captions(text: str, known_names: Iterable[str]) -> list[tuple[str, str
         if not line:
             continue
         folded = line.casefold()
-        if folded in known or folded == SELF_LABEL or (not known and looks_like_name(line)):
+        name_like = looks_like_name(line) and (len(line.split()) >= 2 or not known)
+        if folded in known or folded == SELF_LABEL or name_like:
             blocks.append([known.get(folded, line), ""])
         elif blocks:
             blocks[-1][1] = f"{blocks[-1][1]} {line}".strip()
