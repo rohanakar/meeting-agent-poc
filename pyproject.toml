@@ -43,6 +43,10 @@ extend-exclude = ["ui"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "PLC0415"]
 
+[tool.ruff.lint.isort]
+# The docker/ folder holds Dockerfiles; the import is the Docker SDK.
+known-third-party = ["docker"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
