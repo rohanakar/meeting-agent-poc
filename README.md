@@ -60,7 +60,7 @@ Host ports: API and UI `8040`, Postgres `5442`, Redis `6392`.
 
 ## Local mock stack
 
-Three images run the whole agent with no provider accounts: `meeting-agent`, `meeting-agent-mock-anthropic` and `meeting-agent-mock-elevenlabs`. The bot still joins real meetings; only the provider APIs are replaced, and every mock uses the key `test`.
+Two images run the agent without an Anthropic or OpenAI account: `meeting-agent` and `meeting-agent-mock-anthropic`. The bot still joins real meetings, and speech to text is real ElevenLabs Scribe v2 with your `ELEVENLABS_API_KEY`. The mock uses the key `test`.
 
 ```sh
 claude setup-token              # once; put the token in .env as CLAUDE_CODE_OAUTH_TOKEN
@@ -68,17 +68,9 @@ mkdir -p data
 docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
 ```
 
-| Image | Stands in for | How it answers |
-|---|---|---|
-| `meeting-agent-mock-anthropic` (`mocks/anthropic/`) | Anthropic messages, OpenAI embeddings | `mock_llm_server.py` from `scripts/framework`, Claude Code backend only. Summaries come from `claude -p`. Claude has no embedding model, so for embeddings `claude -p` lists each text's concepts, synonyms and broader terms, and each term is hashed into a fixed position of a 1536-dimension vector. Texts that share concepts end up close without sharing words, and a text always gets the same vector. It does not start without `CLAUDE_CODE_OAUTH_TOKEN`. `http://localhost:11445/__mock__/calls` lists what it answered |
-| `meeting-agent-mock-elevenlabs` (`mocks/elevenlabs/`) | ElevenLabs speech to text | Speech to text does no recognition: it finds the meeting whose `audio.ogg` has the uploaded bytes and returns that folder's transcript. Its text to speech (espeak-ng) is no longer called: the spoken notice is always `data/notice/disclaimer.mp3` |
+`meeting-agent-mock-anthropic` (`mocks/anthropic/`) stands in for Anthropic messages and OpenAI embeddings. It is `mock_llm_server.py` from `scripts/framework`, with Claude Code as its only backend: summaries come from `claude -p`. Claude has no embedding model, so for embeddings `claude -p` lists each text's concepts, synonyms and broader terms, and each term is hashed into a fixed position of a 1536-dimension vector. Texts that share concepts end up close without sharing words, and a text always gets the same vector. It does not start without `CLAUDE_CODE_OAUTH_TOKEN`. `http://localhost:11445/__mock__/calls` lists what it answered.
 
-In mock mode the meeting folders are on this machine, in `./data/meetings/<meeting id>/`. Put a transcript next to `audio.ogg`:
-
-- `transcript.txt`: one turn per line, `Name: text`, optionally starting with `[mm:ss]`. Word times are made up at 150 words a minute. Names are not sent on: like the real service, the mock returns speaker ids only, and the summary step works out names from what people say.
-- `transcript.json`: an ElevenLabs speech-to-text response, returned as it is.
-
-With neither, the mock returns `mocks/elevenlabs/default_transcript.txt` (a three-person contract review with clear action items). Transcription runs after the bot leaves, so a transcript can be dropped in while the meeting is still going.
+In mock mode the meeting folders are on this machine, in `./data/meetings/<meeting id>/`.
 
 ## Configuration
 
@@ -91,7 +83,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `ELEVENLABS_API_KEY` | | Speech to text |
 | `ANTHROPIC_API_KEY` | | Summary and action items |
 | `OPENAI_API_KEY` | | Embeddings for search |
-| `ELEVENLABS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | | Empty means the provider's own API; the mock compose file points them at the mocks |
+| `ELEVENLABS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | | Empty means the provider's own API; the mock compose file points Anthropic and OpenAI at the mock |
 | `CLAUDE_CODE_OAUTH_TOKEN` | | Mock stack only: Claude Code's login inside the mock Anthropic container |
 | `SUMMARY_MODEL` | `claude-sonnet-5` | |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | 1536 dimensions; the column size depends on it |

@@ -1,19 +1,17 @@
-# meeting-agent with local stand-ins for Anthropic (summary and embeddings) and ElevenLabs.
-# The bot still joins real meetings; only the provider APIs are mocked, all with the key "test".
+# meeting-agent with a local stand-in for Anthropic (summary and embeddings), key "test".
+# The bot still joins real meetings, and speech to text is real ElevenLabs (ELEVENLABS_API_KEY).
 #
 #   mkdir -p data
 #   docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
 #
 # Needs CLAUDE_CODE_OAUTH_TOKEN in .env (run `claude setup-token`). Meeting folders live in
-# ./data/meetings/<meeting id>/; put transcript.txt or transcript.json next to audio.ogg.
+# ./data/meetings/<meeting id>/.
 
 x-mock-providers: &mock-providers
   ANTHROPIC_API_KEY: test
   ANTHROPIC_BASE_URL: http://mock-anthropic:11435
   OPENAI_API_KEY: test
   OPENAI_BASE_URL: http://mock-anthropic:11435/v1
-  ELEVENLABS_API_KEY: test
-  ELEVENLABS_BASE_URL: http://mock-elevenlabs:11437
   # The worker mounts this volume into each bot container.
   DATA_VOLUME: meeting-agent-mock-data
 
@@ -36,21 +34,8 @@ services:
     ports:
       - "11445:11435"   # GET /__mock__/calls shows what the mock answered
 
-  mock-elevenlabs:
-    build:
-      context: .
-      dockerfile: mocks/elevenlabs/Dockerfile
-    image: meeting-agent-mock-elevenlabs:latest
-    environment:
-      MOCK_API_KEY: test
-      DATA_DIR: /data
-    volumes:
-      - data:/data:ro
-    ports:
-      - "11447:11437"
-
 volumes:
-  # A folder on this machine instead of a Docker volume, so transcripts can be put in by hand.
+  # A folder on this machine instead of a Docker volume, so recordings are easy to reach.
   data:
     name: meeting-agent-mock-data
     driver: local

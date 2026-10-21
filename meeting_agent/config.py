@@ -6,7 +6,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .enums import EgressMode
 
 DEFAULT_NOTICE = (
-    "Hello, I am Lexapaar's AI notetaker. I will be recording this conversation to generate a summary. If anyone does not consent, please remove me from the call. "
+    "Hello, I am Lexapaar's AI notetaker. I will be recording this conversation to generate a "
+    "summary. If anyone does not consent, please remove me from the call. "
 )
 
 
