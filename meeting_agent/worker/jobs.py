@@ -1,6 +1,5 @@
 """RQ jobs. The API enqueues them by name, so it does not import Docker or the pipeline."""
 
-import hashlib
 import json
 import logging
 import re
@@ -33,21 +32,16 @@ SILENCE_DB = -60.0
 
 
 def notice_audio(settings: Settings) -> Path | None:
-    """The spoken notice, made once per text and voice. None leaves the bot with chat only."""
-    if not settings.elevenlabs_api_key:
-        return None
-    # The service is part of the key: a mock's clip must not stand in for the real voice.
-    key = "|".join(
-        [
-            settings.elevenlabs_base_url,
-            settings.tts_model,
-            settings.tts_voice_id,
-            settings.notice_text,
-        ]
-    )
-    path = settings.data_dir / "notice" / f"{hashlib.sha256(key.encode()).hexdigest()[:16]}.mp3"
+    """The spoken notice: data/notice/disclaimer.mp3, made with text to speech when missing.
+
+    Any recording put there is used as it is, so it can be replaced by a real voice. After
+    changing NOTICE_TEXT, delete the file to have it made again. None leaves the bot with chat.
+    """
+    path = settings.data_dir / "notice" / "disclaimer.mp3"
     if path.exists():
         return path
+    if not settings.elevenlabs_api_key:
+        return None
     try:
         client = ElevenLabs(
             api_key=settings.elevenlabs_api_key, base_url=settings.elevenlabs_base_url or None

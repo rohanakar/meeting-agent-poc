@@ -27,7 +27,7 @@ It works on **Google Meet** and the **Zoom web client**. The bot is platform-agn
 ```
 
 1. **Invite.** Paste a meeting link in the UI (or call the API), with a title, the organisation and "now" or a start time. The platform comes from the link.
-2. **Join.** `run_bot` makes the spoken notice once (ElevenLabs text to speech) and starts one bot container. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
+2. **Join.** `run_bot` takes the spoken notice from `data/notice/disclaimer.mp3`, making it with ElevenLabs text to speech when the file is missing, and starts one bot container. Replace the file with your own recording to change the voice; delete it after changing `NOTICE_TEXT`. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
 3. **Admission.** The bot waits up to 10 minutes. The outcome (`admitted`, `denied`, `timeout`, `blocked`) is stored on the meeting.
 4. **Notice.** It posts a chat message and plays the spoken notice through a virtual microphone. If neither works, it leaves without recording.
 5. **Record.** ffmpeg records what the meeting plays, as mono 16 kHz Opus (about 14 MB an hour). The bot stops when the meeting ends, when it has been alone for 2 minutes, after 3 hours, or when someone presses **Stop agent**.
