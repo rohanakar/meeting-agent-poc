@@ -7,7 +7,7 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String,
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from .enums import EgressMode, Identity, MeetingStatus
+from .enums import EgressMode, MeetingStatus
 
 EMBEDDING_DIMENSIONS = 1536
 
@@ -42,7 +42,6 @@ class Meeting(Namespaced, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     egress_mode: Mapped[str] = mapped_column(String(16), default=EgressMode.DIRECT)
-    identity: Mapped[str] = mapped_column(String(16), default=Identity.ANONYMOUS)
     exit_ip: Mapped[str | None] = mapped_column(String(64))
     admission: Mapped[str | None] = mapped_column(String(16))
     failure_reason: Mapped[str | None] = mapped_column(Text)

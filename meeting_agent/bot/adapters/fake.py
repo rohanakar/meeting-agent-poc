@@ -3,7 +3,15 @@
 from playwright.async_api import Page
 
 from ...enums import Admission
-from .base import MeetingAdapter, is_visible, poll_admission
+from .base import MeetingAdapter, is_visible, poll_admission, read_chat
+
+CHAT_SELECTORS = {
+    "chat_message": "#messages li",
+    "chat_message_text": ".text",
+    "chat_group": "li",
+    "chat_sender": ".sender",
+    "chat_time": ".time",
+}
 
 
 class FakeMeeting(MeetingAdapter):
@@ -42,6 +50,9 @@ class FakeMeeting(MeetingAdapter):
     async def captions_text(self, page: Page) -> str | None:
         captions = page.locator("#captions")
         return await captions.inner_text() if await is_visible(captions) else None
+
+    async def chat_messages(self, page: Page) -> list[dict[str, str]]:
+        return await read_chat(page, CHAT_SELECTORS)
 
     async def leave(self, page: Page) -> None:
         if await is_visible(page.locator("#leave")):

@@ -13,13 +13,12 @@ from collections.abc import Iterable
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
+from .. import strings
 from .adapters.base import MeetingAdapter, looks_like_name
 
 logger = logging.getLogger(__name__)
 
 SAMPLE_S = 0.5
-# Meet labels the account's own speech "You"; for the bot that is only its spoken notice.
-SELF_LABEL = "you"
 
 
 def parse_captions(text: str, known_names: Iterable[str]) -> list[tuple[str, str]]:
@@ -41,7 +40,7 @@ def parse_captions(text: str, known_names: Iterable[str]) -> list[tuple[str, str
         name_like = looks_like_name(line) and (len(line.split()) >= 2 or not exact)
         if line in exact:
             blocks.append([line, ""])
-        elif folded in folded_names or folded == SELF_LABEL or name_like:
+        elif folded in folded_names or folded == strings.CAPTIONS_SELF_LABEL or name_like:
             blocks.append([folded_names.get(folded, line), ""])
         elif blocks:
             blocks[-1][1] = f"{blocks[-1][1]} {line}".strip()
@@ -76,7 +75,7 @@ async def sample_speakers(
             current = parse_captions(text, known_names)
             t_ms = round((time.monotonic() - recording_started) * 1000)
             for name in speaking_now(previous, current):
-                if name.casefold() != SELF_LABEL:
+                if name.casefold() != strings.CAPTIONS_SELF_LABEL:
                     marks.append({"t_ms": t_ms, "name": name})
             previous = current
         try:

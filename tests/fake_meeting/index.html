@@ -1,7 +1,7 @@
 <!doctype html>
 <!--
   A stand-in meeting page for the bot container test. It asks for a name, admits the bot after
-  a second, plays clip.wav as "the meeting", then ends. ?deny shows a denial instead.
+  a second, plays clip.wav as "the meeting" while Host types in the chat, then ends.
 -->
 <html lang="en">
   <head>
@@ -35,14 +35,23 @@
         show("waiting");
         setTimeout(() => {
           show("waiting", false);
-          if (location.search.includes("deny")) return show("denied");
           const self = document.createElement("li");
           self.textContent = document.getElementById("name").value;
           document.getElementById("participants").append(self);
           show("call");
+          post("Budget draft: https://example.com/b", "Host");
           // Leave the bot time to give its notice before the meeting starts talking.
           setTimeout(() => audio.play(), 3000);
         }, 1000);
+      };
+      // A chat message; the bot's own have no sender, as on Meet.
+      const post = (text, sender) => {
+        const message = document.createElement("li");
+        message.dataset.messageId = `m${document.querySelectorAll("#messages li").length + 1}`;
+        message.innerHTML = '<span class="sender"></span><span class="text"></span>';
+        message.querySelector(".sender").textContent = sender ?? "";
+        message.querySelector(".text").textContent = text;
+        document.getElementById("messages").append(message);
       };
       // Live captions: while the clip plays, "Host" says one more word every half second.
       document.getElementById("captions-on").onclick = () => show("captions");
@@ -65,9 +74,7 @@
       };
       document.getElementById("chat-input").onkeydown = (event) => {
         if (event.key !== "Enter") return;
-        const message = document.createElement("li");
-        message.textContent = event.target.value;
-        document.getElementById("messages").append(message);
+        post(event.target.value);
         event.target.value = "";
         event.preventDefault();
       };

@@ -24,7 +24,6 @@ export interface Meeting {
   started_at: string | null;
   ended_at: string | null;
   egress_mode: string;
-  identity: string;
   exit_ip: string | null;
   admission: string | null;
   failure_reason: string | null;

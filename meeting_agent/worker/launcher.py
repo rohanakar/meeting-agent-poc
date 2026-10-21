@@ -27,7 +27,7 @@ def start_bot(
     meeting: Meeting,
     settings: Settings,
     notice_audio: Path | None,
-    profile_dir: Path | None,
+    profile_dir: Path,
 ) -> Container:
     out_dir = meeting_dir(meeting.id)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -35,11 +35,6 @@ def start_bot(
     with contextlib.suppress(PermissionError):
         os.chown(out_dir, BOT_UID, BOT_UID)
 
-    if meeting.egress_mode == EgressMode.TUNNEL:
-        # Inside the Tailscale container's network, every packet leaves through the exit node.
-        network = {"network_mode": f"container:{settings.tailscale_container}"}
-    else:
-        network = {"network": settings.docker_network}
     environment = {
         "BOT_MEETING_ID": str(meeting.id),
         "BOT_PLATFORM": meeting.platform,
@@ -49,7 +44,7 @@ def start_bot(
         "BOT_PROXY_URL": settings.egress_proxy_url
         if meeting.egress_mode == EgressMode.PROXY
         else "",
-        "BOT_PROFILE_DIR": str(profile_dir or ""),
+        "BOT_PROFILE_DIR": str(profile_dir),
         "BOT_NOTICE_TEXT": settings.notice_text,
         "BOT_NOTICE_AUDIO": str(notice_audio or ""),
         "BOT_ADMISSION_TIMEOUT_S": str(settings.admission_timeout_s),
@@ -72,7 +67,7 @@ def start_bot(
         # Same volume, same mount point: paths in the environment mean the same file in both.
         volumes={settings.data_volume: {"bind": str(settings.data_dir), "mode": "rw"}},
         shm_size="1g",
-        **network,
+        network=settings.docker_network,
     )
 
 

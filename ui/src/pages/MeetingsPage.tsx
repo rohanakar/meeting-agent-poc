@@ -98,7 +98,6 @@ export default function MeetingsPage() {
               <TableHead>Status</TableHead>
               <TableHead>Platform</TableHead>
               <TableHead>Egress</TableHead>
-              <TableHead>Identity</TableHead>
               <TableHead>Admission</TableHead>
               <TableHead>Exit IP</TableHead>
               <TableHead>Created</TableHead>
@@ -117,7 +116,6 @@ export default function MeetingsPage() {
                 </TableCell>
                 <TableCell>{meeting.platform === "google_meet" ? "Google Meet" : "Zoom"}</TableCell>
                 <TableCell>{meeting.egress_mode}</TableCell>
-                <TableCell>{meeting.identity.replace("_", " ")}</TableCell>
                 <TableCell>{meeting.admission ?? "—"}</TableCell>
                 <TableCell className="font-mono text-xs">{meeting.exit_ip ?? "—"}</TableCell>
                 <TableCell className="whitespace-nowrap text-muted-foreground">
@@ -127,7 +125,7 @@ export default function MeetingsPage() {
             ))}
             {page && page.items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
                   No meetings yet. Invite the agent to one.
                 </TableCell>
               </TableRow>

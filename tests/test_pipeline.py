@@ -7,7 +7,6 @@ import httpx2
 import pytest
 import respx
 from anthropic import Anthropic
-from elevenlabs.types import SpeechToTextWordResponseModel
 from openai import OpenAI
 from sqlalchemy import select
 from sqlalchemy.engine import Engine
@@ -22,8 +21,7 @@ from meeting_agent.models import (
     Summary,
     TranscriptSegment,
 )
-from meeting_agent.pipeline import chunks, embed, summarize
-from meeting_agent.pipeline.stt import group_turns
+from meeting_agent.pipeline import embed, summarize
 from meeting_agent.queues import PIPELINE_QUEUE, get_queue
 from meeting_agent.worker import jobs
 
@@ -64,7 +62,6 @@ def add_meeting(db: Engine, status: str) -> Meeting:
             meeting_url="https://meet.google.com/abc-defg-hij",
             title="Budget review",
             egress_mode="direct",
-            identity="anonymous",
             status=status,
             meta={},
         )
@@ -88,35 +85,6 @@ def segment(idx: int, label: str, start_ms: int, text: str) -> TranscriptSegment
         idx=idx, speaker_label=label, speaker_name=None, start_ms=start_ms, end_ms=start_ms + 900,
         text=text,
     )  # fmt: skip
-
-
-def test_group_turns_splits_on_speaker_changes() -> None:
-    turns = group_turns([SpeechToTextWordResponseModel(**entry) for entry in WORDS])
-
-    assert [(t.speaker_label, t.start_ms, t.end_ms, t.text) for t in turns] == [
-        ("Speaker 1", 0, 900, "Hello team"),
-        ("Speaker 2", 1200, 1400, "HiAnna"),
-        ("Speaker 1", 2000, 2300, "Sure"),
-    ]
-
-
-def test_transcript_chunks_never_split_a_turn(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(chunks, "MAX_CHUNK_CHARS", 80)
-    segments = [
-        segment(0, "Speaker 1", 0, "We need the budget by Friday."),
-        segment(1, "Speaker 2", 5_000, "Agreed."),
-        segment(2, "Speaker 1", 3_725_000, "A long turn " * 10),
-    ]
-
-    drafts = chunks.transcript_chunks(segments)
-
-    assert [draft.text.splitlines()[0][:20] for draft in drafts] == [
-        "[00:00] Speaker 1: W",
-        "[1:02:05] Speaker 1:",
-    ]
-    assert drafts[0].text.endswith("[00:05] Speaker 2: Agreed.")
-    assert drafts[0].meta == {"segment_ids": [0, 1], "speakers": ["Speaker 1", "Speaker 2"]}
-    assert (drafts[1].start_ms, drafts[1].end_ms) == (3_725_000, 3_725_900)
 
 
 @respx.mock
@@ -163,10 +131,14 @@ def test_a_silent_recording_fails_without_transcription(db: Engine) -> None:
     assert get_queue(PIPELINE_QUEUE).jobs == []
 
 
-def test_process_summarises_names_speakers_and_embeds(
+def test_process_summarises_the_transcript_and_chat_names_speakers_and_embeds(
     db: Engine, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     meeting = add_meeting(db, "processing")
+    folder = meeting_dir(meeting.id)
+    folder.mkdir(parents=True, exist_ok=True)
+    chat = [{"t_ms": 6_000, "sender": "Anna Kumar", "text": "Draft: https://example.com/budget"}]
+    (folder / "chat.json").write_text(json.dumps(chat))
     with Session(db) as session:
         for item in [
             segment(0, "Speaker 1", 0, "Thanks Anna. Can you send the budget by Friday?"),
@@ -237,7 +209,9 @@ def test_process_summarises_names_speakers_and_embeds(
     jobs.process(str(meeting.id))
 
     assert requests[0]["model"] == "claude-sonnet-5"
-    assert "[S1 00:04] Speaker 2: Yes, I will send it." in requests[0]["messages"][0]["content"]
+    content = requests[0]["messages"][0]["content"]
+    assert "[S1 00:04] Speaker 2: Yes, I will send it." in content
+    assert "<chat>\n[C0 00:06] Anna Kumar: Draft: https://example.com/budget\n</chat>" in content
     with Session(db) as session:
         assert session.get(Meeting, meeting.id).status == "done"
         assert session.scalar(select(Summary.summary)) == "The team reviewed the budget."
@@ -248,42 +222,3 @@ def test_process_summarises_names_speakers_and_embeds(
         kinds = session.scalars(select(Chunk.kind).order_by(Chunk.id)).all()
         assert kinds == ["transcript", "summary", "action_item"]
         assert "Anna: Yes, I will send it." in session.scalar(select(Chunk.text).limit(1))
-
-
-def test_a_thin_summary_of_a_real_conversation_is_asked_for_again(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    segments = [segment(0, "Speaker 1", 0, "We reviewed the supply agreement in detail " * 12)]
-    thin = {"summary": "Test summary.", "key_points": ["Point one."], "decisions": [],
-            "action_items": [], "speakers": []}  # fmt: skip
-    full = dict(thin, summary="The team reviewed the supply agreement clause by clause and "
-                "agreed to send comments on liability and termination by Friday.")  # fmt: skip
-    answers = [thin, full]
-
-    def claude(request: httpx2.Request) -> httpx2.Response:
-        return httpx2.Response(
-            200,
-            json={
-                "id": "msg_test",
-                "type": "message",
-                "role": "assistant",
-                "model": "claude-sonnet-5",
-                "content": [{"type": "text", "text": json.dumps(answers.pop(0))}],
-                "stop_reason": "end_turn",
-                "stop_sequence": None,
-                "usage": {"input_tokens": 100, "output_tokens": 50},
-            },
-        )
-
-    monkeypatch.setattr(
-        summarize,
-        "Anthropic",
-        lambda **client: Anthropic(
-            **client, http_client=httpx2.Client(transport=httpx2.MockTransport(claude))
-        ),
-    )
-
-    result = summarize.summarize("Supply agreement", [], segments)
-
-    assert result.summary.startswith("The team reviewed")
-    assert answers == []

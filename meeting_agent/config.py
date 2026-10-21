@@ -3,12 +3,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from . import strings
 from .enums import EgressMode
-
-DEFAULT_NOTICE = (
-    "Hello, I am Lexapaar's AI notetaker. I will be recording this conversation to generate a "
-    "summary. If anyone does not consent, please remove me from the call. "
-)
 
 
 class Settings(BaseSettings):
@@ -38,14 +34,14 @@ class Settings(BaseSettings):
     bot_image: str = "meeting-agent:latest"
     docker_network: str = "meeting-agent"
     data_volume: str = "meeting-agent-data"
-    tailscale_container: str = "meeting-agent-tailscale"
     api_internal_url: str = "http://api:8000"
 
     default_egress_mode: EgressMode = EgressMode.DIRECT
     egress_proxy_url: str = ""
-    bot_display_name: str = "Lexapar Notetaker (recording)"
+    bot_display_name: str = strings.BOT_DISPLAY_NAME
+    # The signed-in account every bot uses: data/accounts/<label>/profile, made by bot-login.
     bot_account_label: str = ""
-    notice_text: str = DEFAULT_NOTICE
+    notice_text: str = strings.NOTICE_TEXT
     admission_timeout_s: int = 600
     alone_timeout_s: int = 30
     # Leaves when no meeting audio has arrived for this long, whatever the page shows.
@@ -69,11 +65,11 @@ class BotSettings(BaseSettings):
     display_name: str
     egress_mode: EgressMode = EgressMode.DIRECT
     proxy_url: str = ""
-    # A Chromium profile signed in by the bot-login container; empty for an anonymous guest.
+    # A Chromium profile signed in by the bot-login container; empty only in the container test.
     profile_dir: str = ""
     # <platform>.json here replaces an adapter's selectors without a rebuild.
     selectors_dir: Path = Path("/data/selectors")
-    notice_text: str = DEFAULT_NOTICE
+    notice_text: str = strings.NOTICE_TEXT
     notice_audio: str = ""
     admission_timeout_s: int = 600
     alone_timeout_s: int = 30

@@ -20,12 +20,6 @@ TERMINAL_STATUSES = {MeetingStatus.DONE, MeetingStatus.FAILED, MeetingStatus.CAN
 class EgressMode(StrEnum):
     DIRECT = "direct"
     PROXY = "proxy"
-    TUNNEL = "tunnel"
-
-
-class Identity(StrEnum):
-    ANONYMOUS = "anonymous"
-    SIGNED_IN = "signed_in"
 
 
 class Admission(StrEnum):

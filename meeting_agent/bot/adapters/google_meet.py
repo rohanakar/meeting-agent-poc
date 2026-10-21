@@ -1,72 +1,21 @@
-import re
-
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page
 
+from ... import strings
 from ...enums import Admission
 from .base import (
     EMAIL,
     MeetingAdapter,
-    any_text,
     click_if_visible,
     is_visible,
     looks_like_name,
     poll_admission,
+    read_chat,
 )
 
 
-def either(*selectors: str) -> str:
-    return ", ".join(selectors)
-
-
 class GoogleMeet(MeetingAdapter):
-    # Meet's labels as of October 2026, English UI (the browser is forced to en-US). Replace any
-    # of them in <selectors folder>/google_meet.json when Meet changes, without a rebuild.
-    DEFAULT_SELECTORS = {
-        "name_input": either('input[aria-label="Your name"]', 'input[placeholder="Your name"]'),
-        # Without a camera Meet names it "Ask to join without camera", so only the start is
-        # matched. Never "Switch here": it moves the account's session elsewhere into the bot.
-        "join_button": re.compile(r"^(Ask to join|Join now|Join anyway)\b"),
-        "no_devices_button": re.compile(r"Continue without microphone and camera"),
-        "mic_off_button": either(
-            '[role="button"][aria-label*="Turn off microphone"]',
-            'button[aria-label*="Turn off microphone"]',
-        ),
-        "mic_on_button": either(
-            '[role="button"][aria-label*="Turn on microphone"]',
-            'button[aria-label*="Turn on microphone"]',
-        ),
-        "camera_off_button": either(
-            '[role="button"][aria-label*="Turn off camera"]',
-            'button[aria-label*="Turn off camera"]',
-        ),
-        "leave_button": 'button[aria-label="Leave call"]',
-        "chat_button": 'button[aria-label^="Chat with everyone"]',
-        "chat_input": either(
-            'textarea[aria-label="Send a message"]', 'textarea[placeholder="Send a message"]'
-        ),
-        "participant_tile": "[data-participant-id]",
-        "participant_name": "span.notranslate",
-        # Only other people's tiles carry a control for their microphone ("You can't mute X's
-        # microphone remotely", "Mute X's microphone"); the bot's own tile has none.
-        "others_mic_control": re.compile(r"mute .+['’]s microphone", re.IGNORECASE),
-        # Tiles that show a shared screen, not a person.
-        "presentation_text": any_text("Presentation", "is presenting", "You are presenting"),
-        "captions_button": re.compile(r"^Turn on captions"),
-        "captions_region": '[role="region"][aria-label*="Captions" i]',
-        "denied_text": any_text("denied your request to join"),
-        "blocked_text": any_text("You can't join this call", "You can't join this video call"),
-        "timeout_text": any_text("No one responded to your request"),
-        "ended_text": any_text(
-            "You've been removed from the meeting",
-            "You left the meeting",
-            "ended the meeting for everyone",
-            "The call has ended",
-            "This call has ended",
-            "The meeting has ended",
-            "Return to home screen",
-        ),
-    }
+    DEFAULT_SELECTORS = strings.MEET_SELECTORS
 
     async def join(self, page: Page, display_name: str) -> None:
         await page.wait_for_load_state("domcontentloaded")
@@ -143,7 +92,7 @@ class GoogleMeet(MeetingAdapter):
             if await tile.get_by_text(self.s["presentation_text"]).count():
                 continue
             name = await self.tile_name(tile)
-            names[participant_id] = name or f"Participant {len(names) + 1}"
+            names[participant_id] = name or strings.PLACEHOLDER_NAME.format(number=len(names) + 1)
         return sorted(names.values())
 
     async def own_name(self, page: Page) -> str | None:
@@ -189,6 +138,9 @@ class GoogleMeet(MeetingAdapter):
         if not await is_visible(region):
             return None
         return await region.inner_text()
+
+    async def chat_messages(self, page: Page) -> list[dict[str, str]]:
+        return await read_chat(page, self.s)
 
     async def ended_reason(self, page: Page) -> str | None:
         if page.is_closed():
