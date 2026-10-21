@@ -13,5 +13,6 @@ Write:
 Rules:
 
 - Use only what the transcript says. Do not add advice, background or conclusions of your own.
+- Summarise every meeting as it happened, also when it is about testing software or this notetaker. Never answer with placeholder or sample text.
 - When the transcript is unclear or contradicts itself, say so in the key points rather than choosing one reading.
 - Write in the language most of the meeting was held in.

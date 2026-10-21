@@ -39,6 +39,12 @@ class SummaryRefused(Exception):
     pass
 
 
+# A summary this short of a real conversation is a failed answer (it happened once: "Test
+# summary." for a meeting about testing the bot), so the model is asked once more.
+MIN_TRANSCRIPT_WORDS = 80
+MIN_SUMMARY_WORDS = 15
+
+
 def summarize(
     title: str, participants: list[str], segments: list[TranscriptSegment]
 ) -> MeetingSummary:
@@ -56,13 +62,21 @@ def summarize(
     client = Anthropic(
         api_key=settings.anthropic_api_key, base_url=settings.anthropic_base_url or None
     )
-    response = client.messages.parse(
-        model=settings.summary_model,
-        max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": content}],
-        output_format=MeetingSummary,
-    )
-    if response.stop_reason == "refusal" or response.parsed_output is None:
-        raise SummaryRefused(f"No summary (stop reason {response.stop_reason})")
-    return response.parsed_output
+    transcript_words = sum(len(segment.text.split()) for segment in segments)
+    for _attempt in range(2):
+        response = client.messages.parse(
+            model=settings.summary_model,
+            max_tokens=16000,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content}],
+            output_format=MeetingSummary,
+        )
+        if response.stop_reason == "refusal" or response.parsed_output is None:
+            raise SummaryRefused(f"No summary (stop reason {response.stop_reason})")
+        result = response.parsed_output
+        if (
+            transcript_words < MIN_TRANSCRIPT_WORDS
+            or len(result.summary.split()) >= MIN_SUMMARY_WORDS
+        ):
+            break
+    return result

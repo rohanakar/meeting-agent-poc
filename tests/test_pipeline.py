@@ -248,3 +248,42 @@ def test_process_summarises_names_speakers_and_embeds(
         kinds = session.scalars(select(Chunk.kind).order_by(Chunk.id)).all()
         assert kinds == ["transcript", "summary", "action_item"]
         assert "Anna: Yes, I will send it." in session.scalar(select(Chunk.text).limit(1))
+
+
+def test_a_thin_summary_of_a_real_conversation_is_asked_for_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    segments = [segment(0, "Speaker 1", 0, "We reviewed the supply agreement in detail " * 12)]
+    thin = {"summary": "Test summary.", "key_points": ["Point one."], "decisions": [],
+            "action_items": [], "speakers": []}  # fmt: skip
+    full = dict(thin, summary="The team reviewed the supply agreement clause by clause and "
+                "agreed to send comments on liability and termination by Friday.")  # fmt: skip
+    answers = [thin, full]
+
+    def claude(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(
+            200,
+            json={
+                "id": "msg_test",
+                "type": "message",
+                "role": "assistant",
+                "model": "claude-sonnet-5",
+                "content": [{"type": "text", "text": json.dumps(answers.pop(0))}],
+                "stop_reason": "end_turn",
+                "stop_sequence": None,
+                "usage": {"input_tokens": 100, "output_tokens": 50},
+            },
+        )
+
+    monkeypatch.setattr(
+        summarize,
+        "Anthropic",
+        lambda **client: Anthropic(
+            **client, http_client=httpx2.Client(transport=httpx2.MockTransport(claude))
+        ),
+    )
+
+    result = summarize.summarize("Supply agreement", [], segments)
+
+    assert result.summary.startswith("The team reviewed")
+    assert answers == []
