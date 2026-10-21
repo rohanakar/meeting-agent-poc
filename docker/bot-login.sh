@@ -19,8 +19,10 @@ chromium="$(find /ms-playwright -path '*/chromium-*/chrome-linux*/chrome' -type 
 echo "Open http://localhost:6080/vnc.html and sign in to the bot's Google account."
 echo "Then check meet.google.com shows the account, close the browser window, and stop this."
 # --password-store=basic: Playwright launches Chromium the same way, so the bots can read
-# the cookies this browser writes.
+# the cookies this browser writes. --no-sandbox, as Playwright does for the bots: hosts that
+# forbid unprivileged user namespaces (the OCI server) make Chromium's own sandbox abort, and
+# the container is the boundary either way.
 exec setpriv --reuid=bot --regid=bot --init-groups env HOME=/home/bot \
-    "$chromium" --user-data-dir="$profile" --password-store=basic --no-first-run \
+    "$chromium" --user-data-dir="$profile" --password-store=basic --no-sandbox --no-first-run \
     --no-default-browser-check --lang=en-US --window-position=0,0 --window-size=1280,800 \
     https://accounts.google.com/
