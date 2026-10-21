@@ -122,7 +122,7 @@ def test_bot_gives_notice_then_records_the_meeting(
     assert by_kind["admission"] == {"result": "admitted", "decided_by": "page"}
     assert by_kind["notice_posted"] == {"ok": True}
     assert by_kind["notice_spoken"] == {"ok": True}
-    assert by_kind["participants"] == {"names": ["Host", "Test Notetaker"]}
+    assert by_kind["participants"] == {"names": ["Host", "Test Notetaker [BOT]"]}
     assert by_kind["meeting_ended"] == {"reason": "ended"}
     assert by_kind["egress_checked"]["leaked_ips"] == []
     assert by_kind["captions"] == {"on": True}

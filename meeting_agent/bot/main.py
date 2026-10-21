@@ -139,14 +139,22 @@ async def watch(
         await collect_chat(adapter, page, settings, chat, recording_started)
         names = await adapter.participant_names(page)
         emails.update(await adapter.participant_emails(page))
+        found_self = False
         if "name" not in me:
             # Zoom shows the configured name on the bot's tile; Meet shows the account's.
             own = settings.display_name if settings.display_name in names else None
             if own or (own := await adapter.own_name(page)):
                 me["name"] = own
-        if set(names) - seen:
+                found_self = True
+        # Reported again once the bot knows which tile is its own, so the list shows the tag.
+        if set(names) - seen or found_self:
             seen.update(names)
-            await reporter.event(EventKind.PARTICIPANTS, names=sorted(seen))
+            await reporter.event(
+                EventKind.PARTICIPANTS,
+                names=[
+                    f"{name} [BOT]" if name == me.get("name") else name for name in sorted(seen)
+                ],
+            )
             # The page as it was when the list changed: when a tile's name cannot be read,
             # this shows where the platform put it.
             await page.screenshot(path=settings.out_dir / "debug" / "in-call.png")
