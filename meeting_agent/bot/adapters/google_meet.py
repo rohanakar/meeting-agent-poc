@@ -107,7 +107,8 @@ class GoogleMeet(MeetingAdapter):
             if not await click_if_visible(page.locator(self.s["chat_button"])):
                 # Meet's shortcut for the chat panel, for when the button's label changed.
                 await page.keyboard.press("Control+Alt+c")
-        await chat_input.wait_for(timeout=10_000)
+        # Right after joining, with every video stream starting, the panel can take a while.
+        await chat_input.wait_for(timeout=30_000)
         await chat_input.fill(text)
         await chat_input.press("Enter")
 

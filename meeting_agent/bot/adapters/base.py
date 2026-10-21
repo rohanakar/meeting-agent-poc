@@ -19,9 +19,10 @@ Root = Page | FrameLocator
 Selectors = dict[str, str | re.Pattern[str]]
 
 # Tips and pop-ups that cover controls: only buttons with these labels are clicked, so no meeting
-# control is ever pressed by accident.
+# control is ever pressed by accident. Not "Close": Meet's chat panel has one, and closing it
+# made the chat notice fail on its retry.
 DISMISS_BUTTON = re.compile(
-    r"^(Got it|Dismiss|Close|Not now|No thanks|OK|Skip|Maybe later|I understand)$", re.IGNORECASE
+    r"^(Got it|Dismiss|Not now|No thanks|OK|Skip|Maybe later|I understand)$", re.IGNORECASE
 )
 
 

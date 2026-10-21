@@ -39,6 +39,9 @@ MEDIA_LOST_S = 20
 # Sound energy (WebRTC totalAudioEnergy) one poll must add to count as someone speaking:
 # about -40 dBFS on average over the poll; background hiss stays far below it.
 SPEECH_ENERGY_PER_POLL = 1e-3
+# A chat notice that failed is tried again this often, this many times, while the bot records.
+CHAT_RETRY_S = 30
+CHAT_RETRIES = 4
 # Names the bot makes up for tiles without a label; they count people but name nobody.
 PLACEHOLDER_NAME = re.compile(r"^Participant \d+$")
 
@@ -87,9 +90,13 @@ async def watch(
     reporter: Reporter,
     seen: set[str],
     emails: dict[str, str],
+    chat_pending: bool,
 ) -> str:
-    """Returns why the meeting ended for the bot. Fills seen and emails as people show up."""
+    """Returns why the meeting ended for the bot. Fills seen and emails as people show up, and
+    posts the chat notice if it could not be posted before the recording started."""
     started = last_sound = time.monotonic()
+    chat_tries = 0
+    next_chat_try = started + CHAT_RETRY_S
     alone_since: float | None = None
     media_lost_since: float | None = None
     last_energy: float | None = None
@@ -99,6 +106,17 @@ async def watch(
             return "stopped"
         if reason := await adapter.ended_reason(page):
             return reason
+
+        if chat_pending and now >= next_chat_try:
+            chat_tries += 1
+            try:
+                await adapter.send_chat(page, settings.notice_text)
+                chat_pending = False
+                await reporter.event(EventKind.NOTICE_POSTED, ok=True, attempt=chat_tries + 1)
+            except PlaywrightError as error:
+                logger.warning("chat notice retry %d failed: %r", chat_tries, error)
+                chat_pending = chat_tries < CHAT_RETRIES
+                next_chat_try = now + CHAT_RETRY_S
 
         media = await media_state(page)
         if media.connections or media_lost_since is not None:
@@ -202,7 +220,8 @@ async def run(settings: BotSettings) -> int:
                 raise NotRecorded(f"admission_{admission}")
 
             # Notice first: nothing is recorded before the meeting has been told.
-            if not await give_notice(adapter, page, settings, reporter):
+            posted, spoken = await give_notice(adapter, page, settings, reporter)
+            if not (posted or spoken):
                 raise NotRecorded("notice_failed")
             recorder.start()
             await reporter.event(EventKind.RECORDING_STARTED)
@@ -217,7 +236,9 @@ async def run(settings: BotSettings) -> int:
                 sampler = asyncio.ensure_future(
                     sample_speakers(adapter, page, recorder.started_at, seen, marks, sampling_done)
                 )
-            reason = await watch(adapter, page, settings, stop, reporter, seen, emails)
+            reason = await watch(
+                adapter, page, settings, stop, reporter, seen, emails, chat_pending=not posted
+            )
             await reporter.event(EventKind.MEETING_ENDED, reason=reason)
         except NotRecorded as outcome:
             exit_code = 2

@@ -17,10 +17,11 @@ NOTICE_SINK = "notice_in"
 
 async def give_notice(
     adapter: MeetingAdapter, page: Page, settings: BotSettings, reporter: Reporter
-) -> bool:
+) -> tuple[bool, bool]:
     """Tells the meeting it is being recorded, in chat and out loud.
 
-    Returns True if at least one notice went out; the bot records only then.
+    Returns whether the chat notice and the spoken notice went out. The bot records only when
+    at least one did, and keeps trying the chat notice while it records (main.watch).
     """
     posted = spoken = False
     try:
@@ -45,4 +46,4 @@ async def give_notice(
             with contextlib.suppress(Exception):
                 await adapter.set_microphone(page, False)
         await reporter.event(EventKind.NOTICE_SPOKEN, ok=spoken)
-    return posted or spoken
+    return posted, spoken
