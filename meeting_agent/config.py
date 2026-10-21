@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     bot_account_label: str = ""
     notice_text: str = DEFAULT_NOTICE
     admission_timeout_s: int = 600
-    alone_timeout_s: int = 120
+    alone_timeout_s: int = 30
     # Leaves when no meeting audio has arrived for this long, whatever the page shows.
     silence_timeout_s: int = 600
     max_meeting_s: int = 3 * 60 * 60
@@ -75,7 +75,7 @@ class BotSettings(BaseSettings):
     notice_text: str = DEFAULT_NOTICE
     notice_audio: str = ""
     admission_timeout_s: int = 600
-    alone_timeout_s: int = 120
+    alone_timeout_s: int = 30
     # Leaves when no meeting audio has arrived for this long, whatever the page shows.
     silence_timeout_s: int = 600
     max_meeting_s: int = 3 * 60 * 60

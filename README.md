@@ -30,7 +30,7 @@ It works on **Google Meet** and the **Zoom web client**. The bot is platform-agn
 2. **Join.** `run_bot` starts one bot container. The spoken notice is always `data/notice/disclaimer.mp3`, used as it is; nothing is generated, and without the file the bot gives the chat notice only. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
 3. **Admission.** The bot waits up to 10 minutes. The outcome (`admitted`, `denied`, `timeout`, `blocked`) is stored on the meeting.
 4. **Notice.** It posts a chat message and plays the spoken notice through a virtual microphone. If neither works, it leaves without recording.
-5. **Record.** ffmpeg records what the meeting plays, as mono 16 kHz Opus (about 14 MB an hour). The bot stops when the meeting ends, when it has been alone for 2 minutes, after 3 hours, or when someone presses **Stop agent**.
+5. **Record.** ffmpeg records what the meeting plays, as mono 16 kHz Opus (about 14 MB an hour). The bot stops when the meeting ends, when it has been alone for 30 seconds, after 3 hours, or when someone presses **Stop agent**.
 6. **Speech to text.** The worker rejects silent recordings, then sends the audio to Scribe v2 with speaker separation.
 7. **Process.** One Claude Sonnet 5 call returns the summary, key points, decisions, action items (owner, due date, cited transcript segments) and a name for each speaker label where the transcript makes it clear. Transcript windows, the summary and each action item are embedded and stored.
 
@@ -102,7 +102,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `BOT_ACCOUNT_LABEL` | | For signed-in Meet bots: the account folder `bot-login` signs into |
 | `BOT_DISPLAY_NAME` | `Lexapar Notetaker (recording)` | The guest name in the meeting |
 | `NOTICE_TEXT` | see `config.py` | Posted in chat (the spoken notice is `data/notice/disclaimer.mp3`) |
-| `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `SILENCE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 120, 600, 10800 | |
+| `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `SILENCE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 30, 600, 10800 | |
 
 ## Network egress
 
