@@ -115,6 +115,57 @@ Google Meet refuses guests whose browser is driven by automation ("You can't joi
 
 Each bot starts from a copy of `data/accounts/<label>/profile`, so several can run at once. Use a dedicated account (for example `notetaker@yourfirm.com`, named "Lexapar Notetaker"): Meet shows the account's name, and the profile folder holds a live session of that account. Sign in again when Google ends the session; the bot then fails at the join screen. Without a profile, `run_bot` fails the meeting before it starts a bot.
 
+## Deploying on OCI
+
+Jenkins checks the repo out on the OCI host and runs `deploy/oci.sh` there over SSH. The script writes `.env` from the host's secrets file, starts the stack with `docker-compose.server.yml` (no published ports; Nginx Proxy Manager reaches the app through the `meeting-agent-web` Caddy sidecar on `shared_net`), and waits until the API is healthy.
+
+The Jenkins job's shell step:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+# The workspace is on the OCI host itself (Jenkins' data folder lives there).
+HOST_WORKSPACE="/home/opc/jenkins_data/workspace/${JOB_NAME}"
+ssh -o StrictHostKeyChecking=no opc@cognifuze.com bash "$HOST_WORKSPACE/deploy/oci.sh" "$HOST_WORKSPACE"
+```
+
+### One-time host setup
+
+The script checks these and stops with a message if one is missing.
+
+1. **Secrets** in `~/secrets/meeting-agent.env`, readable only by `opc`:
+
+   ```sh
+   mkdir -p ~/secrets && (umask 077 && cat > ~/secrets/meeting-agent.env <<EOF
+   API_KEY=$(od -An -N20 -tx1 /dev/urandom | tr -d ' \n')
+   INTERNAL_TOKEN=$(od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
+   ELEVENLABS_API_KEY=<key>
+   ANTHROPIC_API_KEY=<key>
+   OPENAI_API_KEY=<key>
+   EOF
+   )
+   grep ^API_KEY= ~/secrets/meeting-agent.env   # the key the UI asks for
+   ```
+
+2. **Docker Compose 2.29.7.** The host's own Compose (2.21) predates `!reset` and `env_file: {required}`, so the deploy uses its own copy and leaves the system one alone:
+
+   ```sh
+   mkdir -p ~/tools && cd ~/tools
+   curl -fsSLo docker-compose-v2.29.7 https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-aarch64
+   echo "6e9fbd5daa20dca5d7d89145081ae8155d68ef2928b497d9f85b54fe0f9dbb2c  docker-compose-v2.29.7" | sha256sum -c -
+   chmod +x docker-compose-v2.29.7
+   ```
+
+3. **Network:** the Docker network `shared_net` exists, with Nginx Proxy Manager attached to it. NPM forwards the site to `meeting-agent-web:8000`.
+
+4. **Bot account:** after the first deploy, sign the bot in once ([Bot account](#bot-account)) through an SSH tunnel, because the login screen listens on the host's localhost only:
+
+   ```sh
+   ssh -L 6080:localhost:6080 opc@cognifuze.com     # from your laptop
+   cd <workspace> && ~/tools/docker-compose-v2.29.7 --profile login up -d bot-login
+   open http://localhost:6080/vnc.html              # on your laptop
+   ```
+
 ## API
 
 Every `/api` call needs `X-API-Key`. Every read takes `namespace` (the organisation) and sees only that organisation's rows.
