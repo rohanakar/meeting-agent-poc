@@ -42,10 +42,11 @@ Needs Docker, [uv](https://docs.astral.sh/uv/) and Node 22.
 
 ```sh
 cp .env.example .env            # add ELEVENLABS_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY
-docker build -f docker/bot.Dockerfile -t meeting-agent-bot:latest .
 docker compose up -d --build    # Postgres, Redis, API (runs migrations), workers
 open http://localhost:8040      # API key "dev-api-key" unless you changed API_KEY
 ```
+
+One image, `meeting-agent`, runs the API, both workers and the bots: the worker starts each bot from the same image, as the `bot` user, with the `bot-entrypoint` command. To run without any provider keys, see [Local mock stack](#local-mock-stack).
 
 Then click **Invite agent**, paste a Meet or Zoom link, and admit the bot when it knocks.
 
@@ -56,6 +57,28 @@ cd ui && npm install && npm run dev   # http://localhost:5173, proxies /api to :
 ```
 
 Host ports: API and UI `8040`, Postgres `5442`, Redis `6392`.
+
+## Local mock stack
+
+Three images run the whole agent with no provider accounts: `meeting-agent`, `meeting-agent-mock-anthropic` and `meeting-agent-mock-elevenlabs`. The bot still joins real meetings; only the provider APIs are replaced, and every mock uses the key `test`.
+
+```sh
+claude setup-token              # once; put the token in .env as CLAUDE_CODE_OAUTH_TOKEN
+mkdir -p data
+docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
+```
+
+| Image | Stands in for | How it answers |
+|---|---|---|
+| `meeting-agent-mock-anthropic` (`mocks/anthropic/`) | Anthropic messages, OpenAI embeddings | `mock_llm_server.py` from `scripts/framework`, Claude Code backend only. Summaries come from `claude -p`. Claude has no embedding model, so for embeddings `claude -p` lists each text's concepts, synonyms and broader terms, and each term is hashed into a fixed position of a 1536-dimension vector. Texts that share concepts end up close without sharing words, and a text always gets the same vector. It does not start without `CLAUDE_CODE_OAUTH_TOKEN`. `http://localhost:11445/__mock__/calls` lists what it answered |
+| `meeting-agent-mock-elevenlabs` (`mocks/elevenlabs/`) | ElevenLabs speech to text and text to speech | Speech to text does no recognition: it finds the meeting whose `audio.ogg` has the uploaded bytes and returns that folder's transcript. Text to speech is espeak-ng, so the bot's notice is a robot voice |
+
+In mock mode the meeting folders are on this machine, in `./data/meetings/<meeting id>/`. Put a transcript next to `audio.ogg`:
+
+- `transcript.txt`: one turn per line, `Name: text`, optionally starting with `[mm:ss]`. Word times are made up at 150 words a minute. Names are not sent on: like the real service, the mock returns speaker ids only, and the summary step works out names from what people say.
+- `transcript.json`: an ElevenLabs speech-to-text response, returned as it is.
+
+With neither, the mock returns `mocks/elevenlabs/default_transcript.txt` (a three-person contract review with clear action items). Transcription runs after the bot leaves, so a transcript can be dropped in while the meeting is still going.
 
 ## Configuration
 
@@ -68,6 +91,8 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `ELEVENLABS_API_KEY` | | Speech to text, and the spoken notice. Without it the bot gives the chat notice only |
 | `ANTHROPIC_API_KEY` | | Summary and action items |
 | `OPENAI_API_KEY` | | Embeddings for search |
+| `ELEVENLABS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | | Empty means the provider's own API; the mock compose file points them at the mocks |
+| `CLAUDE_CODE_OAUTH_TOKEN` | | Mock stack only: Claude Code's login inside the mock Anthropic container |
 | `SUMMARY_MODEL` | `claude-sonnet-5` | |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | 1536 dimensions; the column size depends on it |
 | `MAX_CONCURRENT_BOTS` | `2` | One `worker-bots` process per bot that may run at once |
@@ -181,7 +206,7 @@ Egress, notice, recording, transcription and search need no change. Teams would 
 ```sh
 docker compose up -d postgres redis
 uv run pytest -m "not docker"   # API, worker and pipeline, against the real Postgres and Redis
-uv run pytest -m docker         # the bot image against tests/fake_meeting (build the image first)
+uv run pytest -m docker         # the bot against tests/fake_meeting (docker compose build first)
 uv run ruff check . && uv run ruff format --check .
 ```
 

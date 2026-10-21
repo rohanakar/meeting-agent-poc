@@ -26,7 +26,7 @@ dependencies = [
 bot = ["playwright>=1.49"]
 
 [dependency-groups]
-dev = ["httpx2>=2.12", "pytest>=8.3", "respx>=0.22", "ruff>=0.9"]
+dev = ["httpx2>=2.12", "pytest>=8.3", "python-multipart>=0.0.20", "respx>=0.22", "ruff>=0.9"]
 
 [build-system]
 requires = ["hatchling"]
@@ -38,7 +38,8 @@ packages = ["meeting_agent"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["ui"]
+# mock_llm_server.py is a copy of scripts/framework/mock_llm_server.py and keeps its style.
+extend-exclude = ["ui", "mocks/anthropic/mock_llm_server.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "PLC0415"]
