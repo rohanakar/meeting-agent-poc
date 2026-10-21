@@ -16,7 +16,8 @@ MIC_ON_BUTTON = (
 CAMERA_OFF_BUTTON = (
     '[role="button"][aria-label*="Turn off camera"], button[aria-label*="Turn off camera"]'
 )
-JOIN_BUTTON = re.compile(r"^(Ask to join|Join now|Join anyway|Switch here)$")
+# Without a camera Meet names it "Ask to join without camera", so only the start is matched.
+JOIN_BUTTON = re.compile(r"^(Ask to join|Join now|Join anyway|Switch here)\b")
 NO_DEVICES_BUTTON = re.compile(r"Continue without microphone and camera")
 LEAVE_BUTTON = 'button[aria-label="Leave call"]'
 CHAT_BUTTON = 'button[aria-label^="Chat with everyone"]'
@@ -43,6 +44,8 @@ class GoogleMeet:
         join_button = page.get_by_role("button", name=JOIN_BUTTON)
         await join_button.first.wait_for(timeout=60_000)
         await click_if_visible(page.get_by_role("button", name=NO_DEVICES_BUTTON))
+        # The "Sign in with your Google account" tip shown to guests.
+        await click_if_visible(page.get_by_role("button", name=DISMISS_BUTTON))
         # A signed-in bot has no name field: Meet shows the account's name instead.
         if await is_visible(page.locator(NAME_INPUT)):
             await page.locator(NAME_INPUT).first.fill(display_name)
