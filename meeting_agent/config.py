@@ -6,9 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from .enums import EgressMode
 
 DEFAULT_NOTICE = (
-    "Hello, I am Lexapar Notetaker. I record and transcribe this meeting for the person who "
-    "invited me, and I make a summary for their organisation. If you do not agree, please ask "
-    "the host to remove me now."
+    "Hello, I am Lexapaar's AI notetaker. I will be recording this conversation to generate a summary. If anyone does not consent, please remove me from the call. "
 )
 
 
@@ -31,8 +29,6 @@ class Settings(BaseSettings):
     anthropic_base_url: str = ""
     openai_base_url: str = ""
     stt_model: str = "scribe_v2"
-    tts_model: str = "eleven_multilingual_v2"
-    tts_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
     summary_model: str = "claude-sonnet-5"
     embedding_model: str = "text-embedding-3-small"
 

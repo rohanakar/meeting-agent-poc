@@ -8,7 +8,6 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from elevenlabs import ElevenLabs
 from requests.exceptions import ConnectionError as RequestsConnectionError
 from requests.exceptions import ReadTimeout
 from sqlalchemy import delete, select
@@ -32,34 +31,13 @@ SILENCE_DB = -60.0
 
 
 def notice_audio(settings: Settings) -> Path | None:
-    """The spoken notice: data/notice/disclaimer.mp3, made with text to speech when missing.
-
-    Any recording put there is used as it is, so it can be replaced by a real voice. After
-    changing NOTICE_TEXT, delete the file to have it made again. None leaves the bot with chat.
-    """
+    """The spoken notice: data/notice/disclaimer.mp3, used as it is. Nothing is generated;
+    without the file the bot gives the chat notice only."""
     path = settings.data_dir / "notice" / "disclaimer.mp3"
     if path.exists():
         return path
-    if not settings.elevenlabs_api_key:
-        return None
-    try:
-        client = ElevenLabs(
-            api_key=settings.elevenlabs_api_key, base_url=settings.elevenlabs_base_url or None
-        )
-        audio = client.text_to_speech.convert(
-            voice_id=settings.tts_voice_id,
-            text=settings.notice_text,
-            model_id=settings.tts_model,
-            output_format="mp3_44100_128",
-        )
-        path.parent.mkdir(parents=True, exist_ok=True)
-        partial = path.with_suffix(".partial")
-        partial.write_bytes(b"".join(audio))
-        partial.rename(path)
-    except Exception:
-        logger.exception("could not make the spoken notice; the bot will use chat only")
-        return None
-    return path
+    logger.warning("%s is missing: the bot gives the chat notice only", path)
+    return None
 
 
 def run_bot(meeting_id: str) -> None:

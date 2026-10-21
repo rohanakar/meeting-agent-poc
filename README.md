@@ -27,7 +27,7 @@ It works on **Google Meet** and the **Zoom web client**. The bot is platform-agn
 ```
 
 1. **Invite.** Paste a meeting link in the UI (or call the API), with a title, the organisation and "now" or a start time. The platform comes from the link.
-2. **Join.** `run_bot` takes the spoken notice from `data/notice/disclaimer.mp3`, making it with ElevenLabs text to speech when the file is missing, and starts one bot container. Replace the file with your own recording to change the voice; delete it after changing `NOTICE_TEXT`. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
+2. **Join.** `run_bot` starts one bot container. The spoken notice is always `data/notice/disclaimer.mp3`, used as it is; nothing is generated, and without the file the bot gives the chat notice only. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
 3. **Admission.** The bot waits up to 10 minutes. The outcome (`admitted`, `denied`, `timeout`, `blocked`) is stored on the meeting.
 4. **Notice.** It posts a chat message and plays the spoken notice through a virtual microphone. If neither works, it leaves without recording.
 5. **Record.** ffmpeg records what the meeting plays, as mono 16 kHz Opus (about 14 MB an hour). The bot stops when the meeting ends, when it has been alone for 2 minutes, after 3 hours, or when someone presses **Stop agent**.
@@ -71,7 +71,7 @@ docker compose -f docker-compose.yml -f docker-compose.mock.yml up -d --build
 | Image | Stands in for | How it answers |
 |---|---|---|
 | `meeting-agent-mock-anthropic` (`mocks/anthropic/`) | Anthropic messages, OpenAI embeddings | `mock_llm_server.py` from `scripts/framework`, Claude Code backend only. Summaries come from `claude -p`. Claude has no embedding model, so for embeddings `claude -p` lists each text's concepts, synonyms and broader terms, and each term is hashed into a fixed position of a 1536-dimension vector. Texts that share concepts end up close without sharing words, and a text always gets the same vector. It does not start without `CLAUDE_CODE_OAUTH_TOKEN`. `http://localhost:11445/__mock__/calls` lists what it answered |
-| `meeting-agent-mock-elevenlabs` (`mocks/elevenlabs/`) | ElevenLabs speech to text and text to speech | Speech to text does no recognition: it finds the meeting whose `audio.ogg` has the uploaded bytes and returns that folder's transcript. Text to speech is espeak-ng, so the bot's notice is a robot voice |
+| `meeting-agent-mock-elevenlabs` (`mocks/elevenlabs/`) | ElevenLabs speech to text | Speech to text does no recognition: it finds the meeting whose `audio.ogg` has the uploaded bytes and returns that folder's transcript. Its text to speech (espeak-ng) is no longer called: the spoken notice is always `data/notice/disclaimer.mp3` |
 
 In mock mode the meeting folders are on this machine, in `./data/meetings/<meeting id>/`. Put a transcript next to `audio.ogg`:
 
@@ -88,7 +88,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 |---|---|---|
 | `API_KEY` | `dev-api-key` | Sent by the UI and API clients as `X-API-Key` |
 | `INTERNAL_TOKEN` | `dev-internal-token` | Bot → API events (`X-Internal-Token`) |
-| `ELEVENLABS_API_KEY` | | Speech to text, and the spoken notice. Without it the bot gives the chat notice only |
+| `ELEVENLABS_API_KEY` | | Speech to text |
 | `ANTHROPIC_API_KEY` | | Summary and action items |
 | `OPENAI_API_KEY` | | Embeddings for search |
 | `ELEVENLABS_BASE_URL`, `ANTHROPIC_BASE_URL`, `OPENAI_BASE_URL` | | Empty means the provider's own API; the mock compose file points them at the mocks |
@@ -101,7 +101,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `TS_AUTHKEY`, `TS_EXIT_NODE` | | For the Tailscale container (`tunnel`, or `proxy` through Tailscale) |
 | `BOT_ACCOUNT_LABEL` | | For signed-in Meet bots: the account folder `bot-login` signs into |
 | `BOT_DISPLAY_NAME` | `Lexapar Notetaker (recording)` | The guest name in the meeting |
-| `NOTICE_TEXT` | see `config.py` | Posted in chat and spoken |
+| `NOTICE_TEXT` | see `config.py` | Posted in chat (the spoken notice is `data/notice/disclaimer.mp3`) |
 | `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `SILENCE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 120, 600, 10800 | |
 
 ## Network egress
