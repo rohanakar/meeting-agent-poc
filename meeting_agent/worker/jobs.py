@@ -15,7 +15,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from .. import strings
-from ..config import Settings, get_settings, meeting_dir
+from ..config import get_settings, meeting_dir
 from ..db import get_sessionmaker
 from ..enums import EventKind, MeetingStatus
 from ..models import ActionItem, BotEvent, Chunk, Meeting, Summary, TranscriptSegment
@@ -33,13 +33,16 @@ logger = logging.getLogger(__name__)
 SILENCE_DB = -60.0
 
 
-def notice_audio(settings: Settings) -> Path | None:
-    """The spoken notice: data/notice/disclaimer.mp3, used as it is. Nothing is generated;
-    without the file the bot gives the chat notice only."""
-    path = settings.data_dir / "notice" / "disclaimer.mp3"
-    if path.exists():
-        return path
-    logger.warning("%s is missing: the bot gives the chat notice only", path)
+# The spoken notice ships in the repo and the image, so every deploy has it; the bot plays it as
+# it is. (It used to live in data/notice, which git ignores, so servers never got it.)
+NOTICE_AUDIO = Path(__file__).parents[1] / "bot" / "disclaimer.mp3"
+
+
+def notice_audio() -> Path | None:
+    """The spoken notice. Without the file the bot gives the chat notice only."""
+    if NOTICE_AUDIO.exists():
+        return NOTICE_AUDIO
+    logger.warning("%s is missing: the bot gives the chat notice only", NOTICE_AUDIO)
     return None
 
 
@@ -56,7 +59,7 @@ def run_bot(meeting_id: str) -> None:
             meeting.failure_reason = strings.NO_BOT_ACCOUNT
             session.commit()
             return
-        container = start_bot(meeting, settings, notice_audio(settings), profile_dir)
+        container = start_bot(meeting, settings, notice_audio(), profile_dir)
         meeting.container_id = container.id
         meeting.status = MeetingStatus.JOINING
         session.commit()

@@ -39,6 +39,8 @@
           self.textContent = document.getElementById("name").value;
           document.getElementById("participants").append(self);
           show("call");
+          // Like a real meeting page, record from the microphone while in the call.
+          navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => (window.micStream = stream));
           post("Budget draft: https://example.com/b", "Host");
           // Leave the bot time to give its notice before the meeting starts talking.
           setTimeout(() => audio.play(), 3000);
