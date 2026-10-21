@@ -91,7 +91,7 @@ async def run(settings: BotSettings) -> int:
     page: Page | None = None
     exit_code = 0
     async with async_playwright() as playwright:
-        browser, context = await launch(playwright, settings)
+        context = await launch(playwright, settings)
         try:
             await reporter.event(
                 EventKind.LAUNCHED,
@@ -158,7 +158,7 @@ async def run(settings: BotSettings) -> int:
                     await adapter.leave(page)
                 except Exception:
                     logger.warning("could not save the page or leave cleanly", exc_info=True)
-            await browser.close()
+            await context.close()
             await reporter.aclose()
     return exit_code
 

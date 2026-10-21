@@ -1,8 +1,9 @@
 import json
+import tempfile
 from pathlib import Path
 
 from cryptography.fernet import Fernet
-from playwright.async_api import Browser, BrowserContext, Playwright
+from playwright.async_api import BrowserContext, Playwright
 
 from ..config import BotSettings
 from .egress import chromium_egress
@@ -20,20 +21,25 @@ CHROMIUM_ARGS = [
 ]
 
 
-async def launch(playwright: Playwright, settings: BotSettings) -> tuple[Browser, BrowserContext]:
-    proxy, egress_args = chromium_egress(settings.egress_mode, settings.proxy_url)
-    browser = await playwright.chromium.launch(
-        headless=False, args=CHROMIUM_ARGS + egress_args, proxy=proxy
-    )
-    storage_state = None
-    if settings.account_state_file:
-        # Written by scripts/bot_login.py: a signed-in session, encrypted at rest.
-        encrypted = Path(settings.account_state_file).read_bytes()
-        storage_state = json.loads(Fernet(settings.fernet_key).decrypt(encrypted))
-    context = await browser.new_context(
+async def launch(playwright: Playwright, settings: BotSettings) -> BrowserContext:
+    proxy, preferences = chromium_egress(settings.egress_mode, settings.proxy_url)
+    # A fresh profile per run: some egress settings exist only as profile preferences.
+    profile = Path(tempfile.mkdtemp(prefix="chromium-profile-"))
+    (profile / "Default").mkdir()
+    (profile / "Default" / "Preferences").write_text(json.dumps(preferences))
+    context = await playwright.chromium.launch_persistent_context(
+        profile,
+        headless=False,
+        args=CHROMIUM_ARGS,
+        proxy=proxy,
         viewport={"width": 1280, "height": 720},
         locale="en-US",
         permissions=["microphone", "camera"],
-        storage_state=storage_state,
     )
-    return browser, context
+    if settings.account_state_file:
+        # Written by scripts/bot_login.py: a signed-in session, encrypted at rest. Google keeps
+        # the session in cookies, the only part a persistent context can take back in.
+        encrypted = Path(settings.account_state_file).read_bytes()
+        state = json.loads(Fernet(settings.fernet_key).decrypt(encrypted))
+        await context.add_cookies(state["cookies"])
+    return context

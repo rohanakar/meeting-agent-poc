@@ -8,6 +8,7 @@
 
 import json
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from playwright.async_api import BrowserContext, ProxySettings
@@ -53,9 +54,12 @@ class EgressCheck:
         return [ip for ip in self.webrtc_ips if ip != self.http_ip]
 
 
-def chromium_egress(mode: EgressMode, proxy_url: str) -> tuple[ProxySettings | None, list[str]]:
+def chromium_egress(
+    mode: EgressMode, proxy_url: str
+) -> tuple[ProxySettings | None, dict[str, Any]]:
+    """The proxy and the profile preferences for one egress mode."""
     if mode != EgressMode.PROXY:
-        return None, []
+        return None, {}
     if not proxy_url:
         raise ValueError("Egress mode is proxy, but no proxy URL is set (EGRESS_PROXY_URL)")
     parts = urlsplit(proxy_url)
@@ -65,7 +69,8 @@ def chromium_egress(mode: EgressMode, proxy_url: str) -> tuple[ProxySettings | N
         proxy["password"] = unquote(parts.password or "")
     # Chromium's proxy carries TCP only. Without this, WebRTC sends media over UDP straight out
     # and the platform sees the host's address. With it, media goes over TCP through the proxy.
-    return proxy, ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"]
+    # A profile preference, because Chromium 156 ignores --force-webrtc-ip-handling-policy.
+    return proxy, {"webrtc": {"ip_handling_policy": "disable_non_proxied_udp"}}
 
 
 async def check_egress(context: BrowserContext) -> EgressCheck:
