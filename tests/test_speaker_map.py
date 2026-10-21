@@ -36,6 +36,15 @@ def test_a_full_name_missing_from_the_tiles_still_starts_a_block() -> None:
     ]
 
 
+def test_names_differing_only_in_case_stay_two_people() -> None:
+    text = "rishabh Chaudhary\nlet us start\nRishabh Chaudhary\nnoted"
+
+    assert parse_captions(text, ["Rishabh Chaudhary", "rishabh Chaudhary"]) == [
+        ("rishabh Chaudhary", "let us start"),
+        ("Rishabh Chaudhary", "noted"),
+    ]
+
+
 def test_only_new_or_growing_blocks_are_speaking() -> None:
     before = [("Anna", "Hello"), ("Ben", "Yes")]
     after = [("Anna", "Hello"), ("Ben", "Yes I agree")]

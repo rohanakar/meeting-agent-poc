@@ -109,8 +109,8 @@ def test_bot_gives_notice_then_records_the_meeting(
         "joining",
         "waiting_admission",
         "admission",
-        "notice_posted",
         "notice_spoken",
+        "notice_posted",
         "recording_started",
         "captions",
         "participants",
@@ -127,7 +127,7 @@ def test_bot_gives_notice_then_records_the_meeting(
     assert by_kind["captions"] == {"on": True}
     assert json.loads((out / "participants.json").read_text()) == [
         {"name": "Host", "email": None},
-        {"name": "Test Notetaker", "email": None},
+        {"name": "Test Notetaker [BOT]", "email": None},
     ]
     # The fake captions name "Host" while the 6 s clip plays: about one mark per half second.
     marks = json.loads((out / "speaker_timeline.json").read_text())

@@ -30,15 +30,19 @@ def parse_captions(text: str, known_names: Iterable[str]) -> list[tuple[str, str
     read that person's tile. A single word counts only while no names are known, since one
     capitalised word is often speech. Other lines are what was said.
     """
-    known = {name.casefold(): name for name in known_names}
+    exact = set(known_names)
+    # Case is only a fallback: two people can share a name that differs only in capitals.
+    folded_names = {name.casefold(): name for name in exact}
     blocks: list[list[str]] = []
     for line in (raw.strip() for raw in text.splitlines()):
         if not line:
             continue
         folded = line.casefold()
-        name_like = looks_like_name(line) and (len(line.split()) >= 2 or not known)
-        if folded in known or folded == SELF_LABEL or name_like:
-            blocks.append([known.get(folded, line), ""])
+        name_like = looks_like_name(line) and (len(line.split()) >= 2 or not exact)
+        if line in exact:
+            blocks.append([line, ""])
+        elif folded in folded_names or folded == SELF_LABEL or name_like:
+            blocks.append([folded_names.get(folded, line), ""])
         elif blocks:
             blocks[-1][1] = f"{blocks[-1][1]} {line}".strip()
     return [(name, words) for name, words in blocks if words]

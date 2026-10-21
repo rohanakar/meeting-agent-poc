@@ -62,6 +62,11 @@ class MeetingAdapter:
         """Why the meeting is over for the bot, or None while it goes on."""
         raise NotImplementedError
 
+    async def own_name(self, page: Page) -> str | None:
+        """The name on the bot's own tile, when the page tells it apart. A signed-in bot shows
+        its account's name, which the bot does not know in advance."""
+        return None
+
     async def participant_emails(self, page: Page) -> dict[str, str]:
         """Email by participant name, for whoever the page shows one. Most pages show none."""
         return {}

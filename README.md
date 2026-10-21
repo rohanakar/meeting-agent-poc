@@ -3,7 +3,7 @@
 A proof of concept: an agent that joins an online meeting, says that it records, records the audio, turns it into a transcript and writes a summary with action items. Transcripts, summaries and action items go into Postgres with pgvector, so they can be searched across meetings, one organisation at a time.
 
 ```
-Invite → bot joins in a browser → notice in chat and out loud → record → speech to text → store → summary and action items → search
+Invite → bot joins in a browser → notice out loud, then in chat → record → speech to text → store → summary and action items → search
 ```
 
 It works on **Google Meet** and the **Zoom web client**. The bot is platform-agnostic: each platform is one adapter file, and network egress is set below the meeting page, so every platform shares it.
@@ -29,7 +29,7 @@ It works on **Google Meet** and the **Zoom web client**. The bot is platform-agn
 1. **Invite.** Paste a meeting link in the UI (or call the API), with a title, the organisation and "now" or a start time. The platform comes from the link.
 2. **Join.** `run_bot` starts one bot container. The spoken notice is always `data/notice/disclaimer.mp3`, used as it is; nothing is generated, and without the file the bot gives the chat notice only. The bot checks its egress, opens the meeting in headed Chromium, gives its name, turns its camera and microphone off, and asks to join.
 3. **Admission.** The bot waits up to 10 minutes. The outcome (`admitted`, `denied`, `timeout`, `blocked`) is stored on the meeting.
-4. **Notice.** It posts a chat message and plays the spoken notice through a virtual microphone. If neither works, it leaves without recording.
+4. **Notice.** It plays the spoken notice (`data/notice/disclaimer.mp3`) through a virtual microphone, then posts the notice in chat. If neither works, it leaves without recording; a chat notice that failed is retried every 30 s while it records.
 5. **Record.** ffmpeg records what the meeting plays, as mono 16 kHz Opus (about 14 MB an hour). The bot stops when the meeting ends, when it has been alone for 30 seconds, after 3 hours, or when someone presses **Stop agent**.
 6. **Speech to text.** The worker rejects silent recordings, then sends the audio to Scribe v2 with speaker separation.
 7. **Process.** One Claude Sonnet 5 call returns the summary, key points, decisions, action items (owner, due date, cited transcript segments) and a name for each speaker label where the transcript makes it clear. Transcript windows, the summary and each action item are embedded and stored.

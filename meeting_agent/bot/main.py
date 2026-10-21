@@ -90,6 +90,7 @@ async def watch(
     reporter: Reporter,
     seen: set[str],
     emails: dict[str, str],
+    me: dict[str, str],
     chat_pending: bool,
 ) -> str:
     """Returns why the meeting ended for the bot. Fills seen and emails as people show up, and
@@ -136,6 +137,11 @@ async def watch(
 
         names = await adapter.participant_names(page)
         emails.update(await adapter.participant_emails(page))
+        if "name" not in me:
+            # Anonymous, the bot's tile carries the configured name; signed in, the account's.
+            own = settings.display_name if settings.display_name in names else None
+            if own or (own := await adapter.own_name(page)):
+                me["name"] = own
         if set(names) - seen:
             seen.update(names)
             await reporter.event(EventKind.PARTICIPANTS, names=sorted(seen))
@@ -175,6 +181,7 @@ async def run(settings: BotSettings) -> int:
     recorder = Recorder(out_dir / "audio.ogg")
     seen: set[str] = set()
     emails: dict[str, str] = {}
+    me: dict[str, str] = {}
     marks: list[dict[str, object]] = []
     sampling_done = asyncio.Event()
     sampler: asyncio.Task[None] | None = None
@@ -237,7 +244,7 @@ async def run(settings: BotSettings) -> int:
                     sample_speakers(adapter, page, recorder.started_at, seen, marks, sampling_done)
                 )
             reason = await watch(
-                adapter, page, settings, stop, reporter, seen, emails, chat_pending=not posted
+                adapter, page, settings, stop, reporter, seen, emails, me, chat_pending=not posted
             )
             await reporter.event(EventKind.MEETING_ENDED, reason=reason)
         except NotRecorded as outcome:
@@ -258,8 +265,12 @@ async def run(settings: BotSettings) -> int:
             if sampler is not None:
                 await sampler
             (out_dir / "speaker_timeline.json").write_text(json.dumps(marks))
+            # The bot is an attendee too, marked so nobody takes it for a person.
             attendees = [
-                {"name": name, "email": emails.get(name)}
+                {
+                    "name": f"{name} [BOT]" if name == me.get("name") else name,
+                    "email": emails.get(name),
+                }
                 for name in sorted(seen)
                 if not PLACEHOLDER_NAME.match(name)
             ]

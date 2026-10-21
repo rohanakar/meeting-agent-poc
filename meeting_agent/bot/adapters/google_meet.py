@@ -47,6 +47,9 @@ class GoogleMeet(MeetingAdapter):
         ),
         "participant_tile": "[data-participant-id]",
         "participant_name": "span.notranslate",
+        # Only other people's tiles carry a control for their microphone ("You can't mute X's
+        # microphone remotely", "Mute X's microphone"); the bot's own tile has none.
+        "others_mic_control": re.compile(r"mute .+['’]s microphone", re.IGNORECASE),
         # Tiles that show a shared screen, not a person.
         "presentation_text": any_text("Presentation", "is presenting", "You are presenting"),
         "captions_button": re.compile(r"^Turn on captions"),
@@ -142,6 +145,21 @@ class GoogleMeet(MeetingAdapter):
             name = await self.tile_name(tile)
             names[participant_id] = name or f"Participant {len(names) + 1}"
         return sorted(names.values())
+
+    async def own_name(self, page: Page) -> str | None:
+        candidates = set()
+        for tile in await page.locator(self.s["participant_tile"]).all():
+            if await tile.get_by_text(self.s["presentation_text"]).count():
+                continue
+            controls = tile.locator("[aria-label]")
+            labels = [
+                await control.get_attribute("aria-label") or "" for control in await controls.all()
+            ]
+            if not any(self.s["others_mic_control"].search(label) for label in labels):
+                if name := await self.tile_name(tile):
+                    candidates.add(name)
+        # Only an unambiguous answer: a tile can lack the control for other reasons too.
+        return candidates.pop() if len(candidates) == 1 else None
 
     async def participant_emails(self, page: Page) -> dict[str, str]:
         # Meet seldom puts an email in a tile; when it does (a label, a tooltip), keep it.
