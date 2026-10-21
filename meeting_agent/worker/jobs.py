@@ -36,12 +36,23 @@ def notice_audio(settings: Settings) -> Path | None:
     """The spoken notice, made once per text and voice. None leaves the bot with chat only."""
     if not settings.elevenlabs_api_key:
         return None
-    key = f"{settings.tts_model}|{settings.tts_voice_id}|{settings.notice_text}"
+    # The service is part of the key: a mock's clip must not stand in for the real voice.
+    key = "|".join(
+        [
+            settings.elevenlabs_base_url,
+            settings.tts_model,
+            settings.tts_voice_id,
+            settings.notice_text,
+        ]
+    )
     path = settings.data_dir / "notice" / f"{hashlib.sha256(key.encode()).hexdigest()[:16]}.mp3"
     if path.exists():
         return path
     try:
-        audio = ElevenLabs(api_key=settings.elevenlabs_api_key).text_to_speech.convert(
+        client = ElevenLabs(
+            api_key=settings.elevenlabs_api_key, base_url=settings.elevenlabs_base_url or None
+        )
+        audio = client.text_to_speech.convert(
             voice_id=settings.tts_voice_id,
             text=settings.notice_text,
             model_id=settings.tts_model,

@@ -3,8 +3,8 @@ name: meeting-agent
 x-app: &app
   build:
     context: .
-    dockerfile: docker/app.Dockerfile
-  image: meeting-agent-app:latest
+    dockerfile: docker/Dockerfile
+  image: meeting-agent:latest
   env_file:
     - path: .env
       required: false

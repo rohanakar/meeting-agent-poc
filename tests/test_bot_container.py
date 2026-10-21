@@ -1,6 +1,6 @@
 """Runs the real bot image against tests/fake_meeting: Xvfb, PulseAudio, Chromium and ffmpeg.
 
-Build the image first: docker build -f docker/bot.Dockerfile -t meeting-agent-bot .
+Build the image first: docker compose build
 Needs internet access for the egress check.
 """
 
@@ -14,7 +14,9 @@ import docker
 import pytest
 from docker.errors import ImageNotFound
 
-IMAGE = "meeting-agent-bot:latest"
+from meeting_agent.worker.launcher import BOT_COMMAND, BOT_USER
+
+IMAGE = "meeting-agent:latest"
 FAKE_MEETING = Path(__file__).parent / "fake_meeting" / "index.html"
 
 pytestmark = pytest.mark.docker
@@ -48,6 +50,8 @@ def run_bot(client: docker.DockerClient, meeting_files: Path, out: Path, query: 
     out.mkdir()
     container = client.containers.run(
         IMAGE,
+        BOT_COMMAND,
+        user=BOT_USER,
         detach=True,
         shm_size="1g",
         volumes={

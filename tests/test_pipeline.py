@@ -222,15 +222,15 @@ def test_process_summarises_names_speakers_and_embeds(
     monkeypatch.setattr(
         summarize,
         "Anthropic",
-        lambda api_key: Anthropic(
-            api_key=api_key, http_client=httpx2.Client(transport=httpx2.MockTransport(claude))
+        lambda **client: Anthropic(
+            **client, http_client=httpx2.Client(transport=httpx2.MockTransport(claude))
         ),
     )
     monkeypatch.setattr(
         embed,
         "OpenAI",
-        lambda api_key: OpenAI(
-            api_key=api_key, http_client=httpx2.Client(transport=httpx2.MockTransport(embeddings))
+        lambda **client: OpenAI(
+            **client, http_client=httpx2.Client(transport=httpx2.MockTransport(embeddings))
         ),
     )
 

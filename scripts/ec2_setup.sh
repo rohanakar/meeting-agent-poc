@@ -25,7 +25,6 @@ if grep -Eq '^TS_AUTHKEY=.+' .env; then
     profile="--profile tunnel"
 fi
 
-sudo docker build -f docker/bot.Dockerfile -t meeting-agent-bot:latest .
 # shellcheck disable=SC2086
 sudo docker compose $profile up -d --build
 

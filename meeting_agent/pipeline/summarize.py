@@ -53,7 +53,10 @@ def summarize(
         f"People seen in the meeting: {', '.join(participants) or 'not known'}\n\n"
         f"<transcript>\n{transcript}\n</transcript>"
     )
-    response = Anthropic(api_key=settings.anthropic_api_key).messages.parse(
+    client = Anthropic(
+        api_key=settings.anthropic_api_key, base_url=settings.anthropic_base_url or None
+    )
+    response = client.messages.parse(
         model=settings.summary_model,
         max_tokens=16000,
         system=SYSTEM_PROMPT,

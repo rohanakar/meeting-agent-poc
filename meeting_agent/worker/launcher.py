@@ -13,8 +13,11 @@ from ..enums import EgressMode
 from ..models import Meeting
 from ..platforms import join_url
 
-# The bot image runs as this user; it must be able to write the meeting folder.
+# The bot runs as this user (uid 1000 in the image); it must be able to write the meeting folder.
+BOT_USER = "bot"
 BOT_UID = 1000
+# The image's default command is the API; the entrypoint starts Xvfb and PulseAudio first.
+BOT_COMMAND = ["bot-entrypoint", "python", "-m", "meeting_agent.bot.main"]
 
 
 def start_bot(
@@ -56,6 +59,8 @@ def start_bot(
     }
     return docker.from_env().containers.run(
         settings.bot_image,
+        BOT_COMMAND,
+        user=BOT_USER,
         detach=True,
         name=f"meeting-bot-{meeting.id.hex[:12]}",
         labels={"meeting-agent.meeting-id": str(meeting.id)},

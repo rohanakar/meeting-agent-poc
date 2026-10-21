@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     anthropic_api_key: str = ""
     openai_api_key: str = ""
+    # Empty means the provider's own API. docker-compose.mock.yml points them at the mocks.
+    elevenlabs_base_url: str = ""
+    anthropic_base_url: str = ""
+    openai_base_url: str = ""
     stt_model: str = "scribe_v2"
     tts_model: str = "eleven_multilingual_v2"
     tts_voice_id: str = "JBFqnCBsd6RMkjVDRZzb"
@@ -33,7 +37,8 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
 
     # The worker starts bot containers next to itself, so these name things on the Docker host.
-    bot_image: str = "meeting-agent-bot:latest"
+    # The same image as the API and the worker; the bot is started with its own entrypoint.
+    bot_image: str = "meeting-agent:latest"
     docker_network: str = "meeting-agent"
     data_volume: str = "meeting-agent-data"
     tailscale_container: str = "meeting-agent-tailscale"

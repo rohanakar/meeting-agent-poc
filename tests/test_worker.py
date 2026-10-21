@@ -42,8 +42,8 @@ class FakeDocker:
         self.runs: list[dict[str, Any]] = []
         self.containers = self
 
-    def run(self, image: str, **kwargs: Any) -> FakeContainer:
-        self.runs.append({"image": image, **kwargs})
+    def run(self, image: str, command: list[str], **kwargs: Any) -> FakeContainer:
+        self.runs.append({"image": image, "command": command, **kwargs})
         return self.container
 
 
@@ -99,7 +99,9 @@ def test_run_bot_starts_the_container_and_queues_transcription(
 
     [run] = fake.runs
     environment = run["environment"]
-    assert run["image"] == "meeting-agent-bot:latest"
+    assert run["image"] == "meeting-agent:latest"
+    assert run["command"] == ["bot-entrypoint", "python", "-m", "meeting_agent.bot.main"]
+    assert run["user"] == "bot"
     assert run["network"] == "meeting-agent"
     assert "network_mode" not in run
     assert environment["BOT_JOIN_URL"] == "https://meet.google.com/abc-defg-hij"

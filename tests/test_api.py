@@ -226,8 +226,8 @@ def test_search_ranks_by_similarity_within_the_namespace(
     monkeypatch.setattr(
         embed,
         "OpenAI",
-        lambda api_key: OpenAI(
-            api_key=api_key, http_client=httpx2.Client(transport=httpx2.MockTransport(handler))
+        lambda **client: OpenAI(
+            **client, http_client=httpx2.Client(transport=httpx2.MockTransport(handler))
         ),
     )
 

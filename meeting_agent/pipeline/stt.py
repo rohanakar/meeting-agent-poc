@@ -28,7 +28,11 @@ class Turn:
 
 def transcribe_file(path: Path) -> list[Turn]:
     settings = get_settings()
-    client = ElevenLabs(api_key=settings.elevenlabs_api_key, timeout=TIMEOUT_S)
+    client = ElevenLabs(
+        api_key=settings.elevenlabs_api_key,
+        base_url=settings.elevenlabs_base_url or None,
+        timeout=TIMEOUT_S,
+    )
     response = client.speech_to_text.convert(
         model_id=settings.stt_model,
         # Named with its extension: ElevenLabs reads the audio format from the file name.
