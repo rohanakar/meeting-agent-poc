@@ -52,7 +52,6 @@ class Settings(BaseSettings):
     admission_timeout_s: int = 600
     alone_timeout_s: int = 120
     max_meeting_s: int = 3 * 60 * 60
-    fernet_key: str = ""
 
 
 @cache
@@ -71,8 +70,8 @@ class BotSettings(BaseSettings):
     display_name: str
     egress_mode: EgressMode = EgressMode.DIRECT
     proxy_url: str = ""
-    account_state_file: str = ""
-    fernet_key: str = ""
+    # A Chromium profile signed in by the bot-login container; empty for an anonymous guest.
+    profile_dir: str = ""
     notice_text: str = DEFAULT_NOTICE
     notice_audio: str = ""
     admission_timeout_s: int = 600

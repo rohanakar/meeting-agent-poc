@@ -97,7 +97,7 @@ async def run(settings: BotSettings) -> int:
                 EventKind.LAUNCHED,
                 platform=settings.platform,
                 egress_mode=settings.egress_mode,
-                signed_in=bool(settings.account_state_file),
+                signed_in=bool(settings.profile_dir),
             )
             egress = await check_egress(context)
             await reporter.event(

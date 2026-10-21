@@ -24,7 +24,7 @@ def start_bot(
     meeting: Meeting,
     settings: Settings,
     notice_audio: Path | None,
-    account_state_file: Path | None,
+    profile_dir: Path | None,
 ) -> Container:
     out_dir = meeting_dir(meeting.id)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -46,8 +46,7 @@ def start_bot(
         "BOT_PROXY_URL": settings.egress_proxy_url
         if meeting.egress_mode == EgressMode.PROXY
         else "",
-        "BOT_ACCOUNT_STATE_FILE": str(account_state_file or ""),
-        "BOT_FERNET_KEY": settings.fernet_key if account_state_file else "",
+        "BOT_PROFILE_DIR": str(profile_dir or ""),
         "BOT_NOTICE_TEXT": settings.notice_text,
         "BOT_NOTICE_AUDIO": str(notice_audio or ""),
         "BOT_ADMISSION_TIMEOUT_S": str(settings.admission_timeout_s),

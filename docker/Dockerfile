@@ -12,9 +12,10 @@ FROM python:3.12-slim-bookworm
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv
 # Xvfb: the bot runs Chromium headed, because meeting pages treat headless browsers as bots.
 # PulseAudio: Chromium plays the meeting into a virtual sink that ffmpeg records.
-# ffmpeg: also the worker's silence check.
+# ffmpeg: also the worker's silence check. x11vnc, novnc, websockify: the bot-login screen.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb pulseaudio pulseaudio-utils ffmpeg dumb-init fonts-noto-color-emoji \
+        x11vnc novnc websockify \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -32,6 +33,7 @@ RUN uv sync --frozen --no-dev --extra bot
 # The bot runs as uid 1000; the worker gives each meeting folder to this user.
 RUN useradd --uid 1000 --create-home bot
 COPY docker/bot-entrypoint.sh /usr/local/bin/bot-entrypoint
+COPY docker/bot-login.sh /usr/local/bin/bot-login
 
 ENTRYPOINT ["dumb-init", "--"]
 CMD ["uvicorn", "meeting_agent.api.app:app", "--host", "0.0.0.0", "--port", "8000"]

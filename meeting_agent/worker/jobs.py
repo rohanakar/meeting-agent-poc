@@ -75,17 +75,17 @@ def run_bot(meeting_id: str) -> None:
         if meeting is None or meeting.status != MeetingStatus.SCHEDULED:
             # Cancelled from the UI while it waited in the queue.
             return
-        account_state_file = None
+        profile_dir = None
         if meeting.identity == Identity.SIGNED_IN:
-            account_state_file = (
-                settings.data_dir / "accounts" / f"{settings.bot_account_label}.enc"
-            )
-            if not settings.bot_account_label or not account_state_file.is_file():
+            profile_dir = settings.data_dir / "accounts" / settings.bot_account_label / "profile"
+            if not settings.bot_account_label or not (profile_dir / "Default").is_dir():
                 meeting.status = MeetingStatus.FAILED
-                meeting.failure_reason = "No signed-in bot account (run scripts/bot_login.py)"
+                meeting.failure_reason = (
+                    "No signed-in bot account: run docker compose --profile login up bot-login"
+                )
                 session.commit()
                 return
-        container = start_bot(meeting, settings, notice_audio(settings), account_state_file)
+        container = start_bot(meeting, settings, notice_audio(settings), profile_dir)
         meeting.container_id = container.id
         meeting.status = MeetingStatus.JOINING
         session.commit()

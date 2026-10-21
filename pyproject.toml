@@ -7,7 +7,6 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "alembic>=1.14",
     "anthropic>=0.70",
-    "cryptography>=44",
     "docker>=7.1",
     "elevenlabs>=2.0",
     "fastapi>=0.115",

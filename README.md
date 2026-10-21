@@ -99,7 +99,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `DEFAULT_EGRESS_MODE` | `direct` | `direct`, `proxy` or `tunnel`; the invite dialog can override it |
 | `EGRESS_PROXY_URL` | | For `proxy` mode |
 | `TS_AUTHKEY`, `TS_EXIT_NODE` | | For the Tailscale container (`tunnel`, or `proxy` through Tailscale) |
-| `BOT_ACCOUNT_LABEL`, `FERNET_KEY` | | For signed-in Meet bots |
+| `BOT_ACCOUNT_LABEL` | | For signed-in Meet bots: the account folder `bot-login` signs into |
 | `BOT_DISPLAY_NAME` | `Lexapar Notetaker (recording)` | The guest name in the meeting |
 | `NOTICE_TEXT` | see `config.py` | Posted in chat and spoken |
 | `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 120, 10800 | |
@@ -135,26 +135,20 @@ Static "ISP" proxies (a fixed address registered to a home ISP, billed per IP) f
 
 ## Signed-in Meet bot
 
-Google Meet admits a signed-in account more readily than an anonymous guest.
+Google Meet refuses anonymous guests whose browser is driven by automation: Playwright-driven Chromium, and even Playwright- or Patchright-driven Google Chrome, get "You can't join this video call" within 2 seconds, while the same link in a normal Incognito window offers "Ask to join". Signed-in bots are how vendors get past this. Google also tends to refuse *sign-in* in an automated browser, so the sign-in happens once, by hand, in the bot's own Chromium running as a normal browser:
 
-1. Create a Google account for the bot, ideally in a dedicated Workspace, named the way it should appear in meetings (e.g. "Lexapar Notetaker").
-2. Set `FERNET_KEY` in `.env` (the script prints a fresh key if it is missing).
-3. On the machine behind the exit node, so Google sees the same address the bots use, run:
-
-   ```sh
-   uv sync --extra bot && uv run playwright install chromium
-   uv run python scripts/bot_login.py --label notetaker1
-   ```
-
-   Sign in in the window that opens. The script saves `data/accounts/notetaker1.enc`.
-4. Copy it into the data volume, and set `BOT_ACCOUNT_LABEL=notetaker1`:
+1. Set `BOT_ACCOUNT_LABEL` in `.env` (e.g. `notetaker`).
+2. Start the login screen and open it:
 
    ```sh
-   docker run --rm -v meeting-agent-data:/data -v "$PWD/data/accounts:/in" alpine \
-     sh -c 'mkdir -p /data/accounts && cp /in/*.enc /data/accounts/'
+   docker compose --profile login up -d bot-login
+   open http://localhost:6080/vnc.html      # Connect, then sign in to the bot's Google account
    ```
 
-5. Invite with identity **Signed-in account**.
+3. Sign in, open meet.google.com to check the account shows, close the browser window, then `docker compose --profile login stop bot-login`.
+4. Invite with identity **Signed-in account**. Each bot starts from a copy of `data/accounts/<label>/profile`, so several can run at once.
+
+Use a dedicated account (for example `notetaker@yourfirm.com`, named "Lexapar Notetaker"): Meet shows the account's name, not `BOT_DISPLAY_NAME`, and the profile folder holds a live session of that account, with access to its mail and Drive. Sign in again when Google ends the session; the bot then fails at the join screen.
 
 ## Running on AWS (one EC2 host)
 
@@ -166,7 +160,17 @@ git clone <this repo> meeting-agent && cd meeting-agent
 ./scripts/ec2_setup.sh      # builds the images and starts the stack
 ```
 
-The script adds the `tunnel` profile when `TS_AUTHKEY` is set. Keep port 8040 closed to the internet: allow only your office address in the security group, or use `ssh -L 8040:localhost:8040 ubuntu@<host>`. Recordings, transcripts and the database stay on the instance's EBS volume.
+The script adds the `tunnel` profile when `TS_AUTHKEY` is set.
+
+Signing the bot in on EC2 works the same way, through an SSH tunnel, because the login screen is published on the host's localhost only:
+
+```sh
+ssh -L 6080:localhost:6080 ubuntu@<host>          # from your laptop
+sudo docker compose --profile login up -d bot-login   # on the host
+open http://localhost:6080/vnc.html                # on your laptop
+```
+
+The profile then lives on that host's EBS volume, next to the bots that use it. Sign in through the same egress the bots will use, so Google sees one location. With several hosts, sign in on each, or keep the profile on shared storage (EFS); Google allows a few dozen concurrent sessions per account. Keep port 8040 closed to the internet: allow only your office address in the security group, or use `ssh -L 8040:localhost:8040 ubuntu@<host>`. Recordings, transcripts and the database stay on the instance's EBS volume.
 
 ## API
 

@@ -170,7 +170,7 @@ def test_signed_in_needs_a_saved_account(db: Engine, monkeypatch: pytest.MonkeyP
 
     assert fake.runs == []
     assert reload(db, meeting).status == "failed"
-    assert "bot_login" in reload(db, meeting).failure_reason
+    assert "bot-login" in reload(db, meeting).failure_reason
 
 
 def test_the_spoken_notice_is_made_once(db: Engine, tts: respx.Route) -> None:
