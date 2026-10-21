@@ -6,7 +6,7 @@ from playwright.async_api import Page
 
 from ..config import BotSettings
 from ..enums import EventKind
-from .adapters.base import MeetingAdapter
+from .adapters.base import MeetingAdapter, with_overlay_retry
 from .report import Reporter
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ async def give_notice(
     """
     posted = spoken = False
     try:
-        await adapter.send_chat(page, settings.notice_text)
+        await with_overlay_retry(page, lambda: adapter.send_chat(page, settings.notice_text))
         posted = True
     except Exception as error:
         logger.warning("chat notice failed: %r", error)

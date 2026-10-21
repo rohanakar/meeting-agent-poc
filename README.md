@@ -102,7 +102,7 @@ All settings come from `.env` (see `.env.example`) and are read by `meeting_agen
 | `BOT_ACCOUNT_LABEL` | | For signed-in Meet bots: the account folder `bot-login` signs into |
 | `BOT_DISPLAY_NAME` | `Lexapar Notetaker (recording)` | The guest name in the meeting |
 | `NOTICE_TEXT` | see `config.py` | Posted in chat and spoken |
-| `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 120, 10800 | |
+| `ADMISSION_TIMEOUT_S`, `ALONE_TIMEOUT_S`, `SILENCE_TIMEOUT_S`, `MAX_MEETING_S` | 600, 120, 600, 10800 | |
 
 ## Network egress
 
@@ -197,6 +197,26 @@ Every table has `namespace`, `created_at` and `updated_at`.
 - `summaries` and `action_items` (with the transcript segments they cite).
 - `chunks`: the searchable text with `embedding vector(1536)` (HNSW, cosine). Search uses iterative index scans, so filters do not starve the results.
 
+## When a platform changes its page
+
+Meeting pages change without notice, so the bot does not depend on the page alone:
+
+| Layer | What it does |
+|---|---|
+| Media connection | An init script wraps the browser's WebRTC connections in every frame. Meeting audio arriving means the bot was admitted, even if the page's "Leave" button changed; the admission event says whether the page or the media decided. All connections down for 20 s means the meeting is over (`media_lost`), and no sound for `SILENCE_TIMEOUT_S` (10 minutes) means nobody is left (`silence`). These signals are the same on every platform. |
+| Pop-ups | When a step fails, the bot closes tips and pop-ups (buttons such as "Got it", "Dismiss", "Not now", in the page and its frames) and tries the step once more. Only those labels are clicked, never meeting controls. |
+| Fallbacks | Each step has a second way in: Meet's join falls back to Enter in the name field, its chat to the Ctrl+Alt+C shortcut. Labels are matched by their start, not exactly. |
+| Selector file | Every selector an adapter uses is in its `DEFAULT_SELECTORS`. A JSON file at `data/selectors/<platform>.json` (`google_meet.json`, `zoom.json`) replaces any of them for the next bot, without a rebuild. Patterns are regular expressions, the rest CSS. |
+| Evidence | A run that did not end well keeps `debug/last-page.png` and `last-page.html`, which show the new page. |
+
+A fix after a page change is then usually one line in the selector file:
+
+```json
+{"join_button": "^(Ask to join|Join now|Request to join)\\b", "leave_button": "button[aria-label^='Leave']"}
+```
+
+Still to add: an hourly canary that joins a test meeting and alerts on any failed step, and an AI vision fallback that reads the screenshot when every selector fails.
+
 ## Adding a platform
 
 1. Add the link pattern to `meeting_agent/platforms.py` (`Platform`, `detect_platform`, `join_url`).
@@ -234,6 +254,7 @@ Common outcomes:
 - `admission timeout`: no one admitted the bot in 10 minutes, or Meet put it in the risk queue. Try a signed-in account.
 - `egress_leak`: WebRTC found a way out around the proxy or tunnel. Check the proxy and the exit node.
 - `The recording is silent`: the bot was in the call but heard nothing, for example because the platform did not connect its audio.
+- `meeting_ended` with `media_lost` or `silence`: the page gave no sign, but the media connection did. Often the meeting simply ended; if it happens while people are still talking, check the platform's page for changes.
 
 ## Known limits of the POC
 

@@ -24,7 +24,9 @@ class Recorder:
                 "-ac", "1", "-ar", "16000",
                 "-c:a", "libopus", "-b:a", "32k", "-application", "voip",
                 str(self.path),
-            ]
+            ],
+            # Its own session: only the bot decides when the recording stops.
+            start_new_session=True,
         )  # fmt: skip
 
     def stop(self) -> float:

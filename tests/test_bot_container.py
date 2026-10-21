@@ -14,7 +14,7 @@ import docker
 import pytest
 from docker.errors import ImageNotFound
 
-from meeting_agent.worker.launcher import BOT_COMMAND, BOT_USER
+from meeting_agent.worker.launcher import BOT_COMMAND, BOT_ENTRYPOINT, BOT_USER
 
 IMAGE = "meeting-agent:latest"
 FAKE_MEETING = Path(__file__).parent / "fake_meeting" / "index.html"
@@ -51,6 +51,7 @@ def run_bot(client: docker.DockerClient, meeting_files: Path, out: Path, query: 
     container = client.containers.run(
         IMAGE,
         BOT_COMMAND,
+        entrypoint=BOT_ENTRYPOINT,
         user=BOT_USER,
         detach=True,
         shm_size="1g",
@@ -116,7 +117,7 @@ def test_bot_gives_notice_then_records_the_meeting(
         "recording_saved",
     ]
     by_kind = {event["kind"]: event["detail"] for event in log}
-    assert by_kind["admission"] == {"result": "admitted"}
+    assert by_kind["admission"] == {"result": "admitted", "decided_by": "page"}
     assert by_kind["notice_posted"] == {"ok": True}
     assert by_kind["notice_spoken"] == {"ok": True}
     assert by_kind["participants"] == {"names": ["Host", "Test Notetaker"]}
@@ -136,7 +137,7 @@ def test_bot_does_not_record_when_denied(
 
     log = events(out)
     assert exit_code == 2
-    assert log[-2]["detail"] == {"result": "denied"}
+    assert log[-2]["detail"] == {"result": "denied", "decided_by": "page"}
     assert (log[-1]["kind"], log[-1]["detail"]) == ("failed", {"reason": "admission_denied"})
     assert not (out / "audio.ogg").exists()
     assert (out / "debug" / "last-page.png").exists()

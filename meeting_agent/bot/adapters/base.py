@@ -1,43 +1,90 @@
 import asyncio
+import json
+import logging
 import re
 import time
 from collections.abc import Awaitable, Callable
-from typing import Protocol
+from pathlib import Path
 
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import FrameLocator, Locator, Page
 
 from ...enums import Admission
 
+logger = logging.getLogger(__name__)
+
 # A page or the frame a platform renders its meeting in; both find elements the same way.
 Root = Page | FrameLocator
+# CSS selectors are strings; texts and accessible names to match are patterns.
+Selectors = dict[str, str | re.Pattern[str]]
+
+# Tips and pop-ups that cover controls: only buttons with these labels are clicked, so no meeting
+# control is ever pressed by accident.
+DISMISS_BUTTON = re.compile(
+    r"^(Got it|Dismiss|Close|Not now|No thanks|OK|Skip|Maybe later|I understand)$", re.IGNORECASE
+)
 
 
-class MeetingAdapter(Protocol):
-    """What the bot needs from one meeting platform. Egress and recording are not its concern.
+class MeetingAdapter:
+    """What the bot needs from one meeting platform. Egress, media and recording are not its
+    concern: those are the same on every platform.
 
-    Each adapter keeps its selectors in one block at the top, roles and visible text first,
-    because platforms change their markup more often than their labels.
+    DEFAULT_SELECTORS holds everything the adapter looks for on the page, roles and visible text
+    first, because platforms change their markup more often than their labels. A JSON file in
+    the selectors folder can replace any of them without a rebuild (see load_selectors).
     """
+
+    DEFAULT_SELECTORS: Selectors = {}
+
+    def __init__(self, selectors: Selectors | None = None):
+        self.s = selectors if selectors is not None else dict(self.DEFAULT_SELECTORS)
 
     async def join(self, page: Page, display_name: str) -> None:
         """Fill in the name if asked, turn the camera and microphone off, ask to join."""
+        raise NotImplementedError
 
-    async def wait_for_admission(self, page: Page, timeout_s: int) -> Admission: ...
+    async def wait_for_admission(self, page: Page, timeout_s: int) -> Admission:
+        raise NotImplementedError
 
-    async def send_chat(self, page: Page, text: str) -> None: ...
+    async def send_chat(self, page: Page, text: str) -> None:
+        raise NotImplementedError
 
-    async def set_microphone(self, page: Page, on: bool) -> None: ...
+    async def set_microphone(self, page: Page, on: bool) -> None:
+        raise NotImplementedError
 
     async def participant_names(self, page: Page) -> list[str]:
-        """Everyone in the call, the bot included. Empty when the page does not say."""
-        ...
+        """Everyone in the call, the bot included, one entry each. Empty when the page does not
+        say, which is not the same as the bot being alone."""
+        raise NotImplementedError
 
     async def ended_reason(self, page: Page) -> str | None:
         """Why the meeting is over for the bot, or None while it goes on."""
-        ...
+        raise NotImplementedError
 
-    async def leave(self, page: Page) -> None: ...
+    async def leave(self, page: Page) -> None:
+        raise NotImplementedError
+
+
+def load_selectors(folder: Path, platform: str, defaults: Selectors) -> Selectors:
+    """The defaults, with any entries from <folder>/<platform>.json put in their place.
+
+    A pattern's replacement is a regular expression string; a CSS selector's is a CSS string.
+    Unknown keys are reported and skipped, so a typo cannot hide a default.
+    """
+    selectors = dict(defaults)
+    path = folder / f"{platform}.json"
+    if not path.is_file():
+        return selectors
+    for key, value in json.loads(path.read_text()).items():
+        default = defaults.get(key)
+        if default is None:
+            logger.warning("%s: no selector named %r", path, key)
+            continue
+        selectors[key] = (
+            re.compile(value, default.flags) if isinstance(default, re.Pattern) else value
+        )
+        logger.info("selector %s from %s", key, path)
+    return selectors
 
 
 async def is_visible(locator: Locator) -> bool:
@@ -52,6 +99,34 @@ async def click_if_visible(locator: Locator) -> bool:
         await locator.first.click()
         return True
     return False
+
+
+async def clear_overlays(page: Page) -> int:
+    """Closes tips and pop-ups in the page and its frames. Returns how many it closed."""
+    closed = 0
+    for frame in page.frames:
+        buttons = frame.get_by_role("button", name=DISMISS_BUTTON)
+        try:
+            for button in await buttons.all():
+                if await button.is_visible():
+                    await button.click(timeout=2000)
+                    closed += 1
+        except PlaywrightError:
+            continue
+    return closed
+
+
+async def with_overlay_retry[T](page: Page, action: Callable[[], Awaitable[T]]) -> T:
+    """Runs a page action; if it fails, closes whatever may cover the page and tries once more.
+
+    A pop-up nobody planned for makes clicks time out ("element intercepts pointer events").
+    """
+    try:
+        return await action()
+    except PlaywrightError as error:
+        closed = await clear_overlays(page)
+        logger.warning("retrying after %r (closed %d pop-ups)", error, closed)
+        return await action()
 
 
 async def poll_admission(

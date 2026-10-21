@@ -3,10 +3,10 @@
 from playwright.async_api import Page
 
 from ...enums import Admission
-from .base import is_visible, poll_admission
+from .base import MeetingAdapter, is_visible, poll_admission
 
 
-class FakeMeeting:
+class FakeMeeting(MeetingAdapter):
     async def join(self, page: Page, display_name: str) -> None:
         await page.locator("#name").fill(display_name)
         await page.locator("#ask").click()

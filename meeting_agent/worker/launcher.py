@@ -18,6 +18,9 @@ BOT_USER = "bot"
 BOT_UID = 1000
 # The image's default command is the API; the entrypoint starts Xvfb and PulseAudio first.
 BOT_COMMAND = ["bot-entrypoint", "python", "-m", "meeting_agent.bot.main"]
+# dumb-init sends the stop signal to the bot only. Sent to the whole group, it also reached
+# ffmpeg and Chromium, so the bot could neither finish the recording nor leave the call.
+BOT_ENTRYPOINT = ["dumb-init", "--single-child", "--"]
 
 
 def start_bot(
@@ -52,6 +55,7 @@ def start_bot(
         "BOT_ADMISSION_TIMEOUT_S": str(settings.admission_timeout_s),
         "BOT_ALONE_TIMEOUT_S": str(settings.alone_timeout_s),
         "BOT_MAX_MEETING_S": str(settings.max_meeting_s),
+        "BOT_SILENCE_TIMEOUT_S": str(settings.silence_timeout_s),
         "BOT_API_URL": settings.api_internal_url,
         "BOT_INTERNAL_TOKEN": settings.internal_token,
         "BOT_OUT_DIR": str(out_dir),
@@ -59,6 +63,7 @@ def start_bot(
     return docker.from_env().containers.run(
         settings.bot_image,
         BOT_COMMAND,
+        entrypoint=BOT_ENTRYPOINT,
         user=BOT_USER,
         detach=True,
         name=f"meeting-bot-{meeting.id.hex[:12]}",

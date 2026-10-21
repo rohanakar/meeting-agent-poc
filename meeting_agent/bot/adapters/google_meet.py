@@ -1,102 +1,125 @@
 import re
 
+from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Page
 
 from ...enums import Admission
-from .base import any_text, click_if_visible, is_visible, poll_admission
-
-# Selectors. Meet's labels as of October 2026, English UI (the browser is forced to en-US).
-NAME_INPUT = 'input[aria-label="Your name"], input[placeholder="Your name"]'
-MIC_OFF_BUTTON = (
-    '[role="button"][aria-label*="Turn off microphone"], button[aria-label*="Turn off microphone"]'
-)
-MIC_ON_BUTTON = (
-    '[role="button"][aria-label*="Turn on microphone"], button[aria-label*="Turn on microphone"]'
-)
-CAMERA_OFF_BUTTON = (
-    '[role="button"][aria-label*="Turn off camera"], button[aria-label*="Turn off camera"]'
-)
-# Without a camera Meet names it "Ask to join without camera", so only the start is matched.
-# Never "Switch here": it moves the account's session in another browser into the bot's.
-JOIN_BUTTON = re.compile(r"^(Ask to join|Join now|Join anyway)\b")
-NO_DEVICES_BUTTON = re.compile(r"Continue without microphone and camera")
-LEAVE_BUTTON = 'button[aria-label="Leave call"]'
-CHAT_BUTTON = 'button[aria-label^="Chat with everyone"]'
-CHAT_INPUT = 'textarea[aria-label="Send a message"], textarea[placeholder="Send a message"]'
-PARTICIPANT_TILE = "[data-participant-id]"
-PARTICIPANT_NAME = "span.notranslate"
-DISMISS_BUTTON = re.compile(r"^(Got it|Dismiss|Close|OK)$")
-
-DENIED_TEXT = any_text("denied your request to join", "You've been removed from the meeting")
-BLOCKED_TEXT = any_text("You can't join this call", "You can't join this video call")
-TIMEOUT_TEXT = any_text("No one responded to your request")
-ENDED_TEXT = any_text(
-    "You've been removed from the meeting",
-    "You left the meeting",
-    "The call has ended",
-    "The meeting has ended",
-    "Return to home screen",
-)
+from .base import MeetingAdapter, any_text, click_if_visible, is_visible, poll_admission
 
 
-class GoogleMeet:
+def either(*selectors: str) -> str:
+    return ", ".join(selectors)
+
+
+class GoogleMeet(MeetingAdapter):
+    # Meet's labels as of October 2026, English UI (the browser is forced to en-US). Replace any
+    # of them in <selectors folder>/google_meet.json when Meet changes, without a rebuild.
+    DEFAULT_SELECTORS = {
+        "name_input": either('input[aria-label="Your name"]', 'input[placeholder="Your name"]'),
+        # Without a camera Meet names it "Ask to join without camera", so only the start is
+        # matched. Never "Switch here": it moves the account's session elsewhere into the bot.
+        "join_button": re.compile(r"^(Ask to join|Join now|Join anyway)\b"),
+        "no_devices_button": re.compile(r"Continue without microphone and camera"),
+        "mic_off_button": either(
+            '[role="button"][aria-label*="Turn off microphone"]',
+            'button[aria-label*="Turn off microphone"]',
+        ),
+        "mic_on_button": either(
+            '[role="button"][aria-label*="Turn on microphone"]',
+            'button[aria-label*="Turn on microphone"]',
+        ),
+        "camera_off_button": either(
+            '[role="button"][aria-label*="Turn off camera"]',
+            'button[aria-label*="Turn off camera"]',
+        ),
+        "leave_button": 'button[aria-label="Leave call"]',
+        "chat_button": 'button[aria-label^="Chat with everyone"]',
+        "chat_input": either(
+            'textarea[aria-label="Send a message"]', 'textarea[placeholder="Send a message"]'
+        ),
+        "participant_tile": "[data-participant-id]",
+        "participant_name": "span.notranslate",
+        "denied_text": any_text("denied your request to join"),
+        "blocked_text": any_text("You can't join this call", "You can't join this video call"),
+        "timeout_text": any_text("No one responded to your request"),
+        "ended_text": any_text(
+            "You've been removed from the meeting",
+            "You left the meeting",
+            "ended the meeting for everyone",
+            "The call has ended",
+            "This call has ended",
+            "The meeting has ended",
+            "Return to home screen",
+        ),
+    }
+
     async def join(self, page: Page, display_name: str) -> None:
         await page.wait_for_load_state("domcontentloaded")
-        join_button = page.get_by_role("button", name=JOIN_BUTTON)
-        await join_button.first.wait_for(timeout=60_000)
-        await click_if_visible(page.get_by_role("button", name=NO_DEVICES_BUTTON))
-        # The "Sign in with your Google account" tip shown to guests.
-        await click_if_visible(page.get_by_role("button", name=DISMISS_BUTTON))
+        name_input = page.locator(self.s["name_input"])
+        join_button = page.get_by_role("button", name=self.s["join_button"])
+        try:
+            await join_button.first.wait_for(timeout=60_000)
+        except PlaywrightError:
+            # The button's label changed, but the name field is still there: Enter in the
+            # field asks to join, like the button does.
+            if not await is_visible(name_input):
+                raise
+            await name_input.first.fill(display_name)
+            await name_input.first.press("Enter")
+            return
+        await click_if_visible(page.get_by_role("button", name=self.s["no_devices_button"]))
         # A signed-in bot has no name field: Meet shows the account's name instead.
-        if await is_visible(page.locator(NAME_INPUT)):
-            await page.locator(NAME_INPUT).first.fill(display_name)
-        await click_if_visible(page.locator(MIC_OFF_BUTTON))
-        await click_if_visible(page.locator(CAMERA_OFF_BUTTON))
+        if await is_visible(name_input):
+            await name_input.first.fill(display_name)
+        await click_if_visible(page.locator(self.s["mic_off_button"]))
+        await click_if_visible(page.locator(self.s["camera_off_button"]))
         await join_button.first.click()
 
     async def wait_for_admission(self, page: Page, timeout_s: int) -> Admission:
         async def check() -> Admission | None:
-            if await is_visible(page.locator(LEAVE_BUTTON)):
+            if await is_visible(page.locator(self.s["leave_button"])):
                 return Admission.ADMITTED
-            if await is_visible(page.get_by_text(DENIED_TEXT)):
+            if await is_visible(page.get_by_text(self.s["denied_text"])):
                 return Admission.DENIED
-            if await is_visible(page.get_by_text(BLOCKED_TEXT)):
+            if await is_visible(page.get_by_text(self.s["blocked_text"])):
                 return Admission.BLOCKED
-            if await is_visible(page.get_by_text(TIMEOUT_TEXT)):
+            if await is_visible(page.get_by_text(self.s["timeout_text"])):
                 return Admission.TIMEOUT
             return None
 
-        result = await poll_admission(check, timeout_s)
-        if result == Admission.ADMITTED:
-            # Welcome tips cover the toolbar; closing them keeps the chat button clickable.
-            await click_if_visible(page.get_by_role("button", name=DISMISS_BUTTON))
-        return result
+        return await poll_admission(check, timeout_s)
 
     async def send_chat(self, page: Page, text: str) -> None:
-        if not await is_visible(page.locator(CHAT_INPUT)):
-            await page.locator(CHAT_BUTTON).first.click()
-        chat_input = page.locator(CHAT_INPUT).first
+        chat_input = page.locator(self.s["chat_input"]).first
+        if not await is_visible(chat_input):
+            if not await click_if_visible(page.locator(self.s["chat_button"])):
+                # Meet's shortcut for the chat panel, for when the button's label changed.
+                await page.keyboard.press("Control+Alt+c")
         await chat_input.wait_for(timeout=10_000)
         await chat_input.fill(text)
         await chat_input.press("Enter")
 
     async def set_microphone(self, page: Page, on: bool) -> None:
-        await click_if_visible(page.locator(MIC_ON_BUTTON if on else MIC_OFF_BUTTON))
+        await click_if_visible(page.locator(self.s["mic_on_button" if on else "mic_off_button"]))
 
     async def participant_names(self, page: Page) -> list[str]:
-        names = []
-        for tile in await page.locator(PARTICIPANT_TILE).all():
-            name = tile.locator(PARTICIPANT_NAME).first
-            if await name.count():
-                names.append((await name.inner_text()).strip())
-        return sorted(set(filter(None, names)))
+        # One entry per participant id: a tile and its inner parts can carry the same id.
+        names: dict[str, str] = {}
+        for tile in await page.locator(self.s["participant_tile"]).all():
+            participant_id = await tile.get_attribute("data-participant-id")
+            if not participant_id or participant_id in names:
+                continue
+            label = tile.locator(self.s["participant_name"]).first
+            name = (await label.inner_text()).strip() if await label.count() else ""
+            names[participant_id] = name or f"Participant {len(names) + 1}"
+        return sorted(names.values())
 
     async def ended_reason(self, page: Page) -> str | None:
         if page.is_closed():
             return "page_closed"
-        if await is_visible(page.get_by_text(ENDED_TEXT)):
+        if await is_visible(page.get_by_text(self.s["ended_text"])):
             return "ended"
         return None
 
     async def leave(self, page: Page) -> None:
-        await click_if_visible(page.locator(LEAVE_BUTTON))
+        await click_if_visible(page.locator(self.s["leave_button"]))

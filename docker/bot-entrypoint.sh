@@ -10,6 +10,10 @@ for attempt in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.3
 done
 
+# An idle sink is suspended and its monitor then delivers nothing, so a meeting where nobody
+# speaks gave an empty file. Without suspension the recorder always gets audio, silence included.
+pactl unload-module module-suspend-on-idle >/dev/null 2>&1 || true
+
 # Everything the meeting plays goes to meeting_out; the recorder reads meeting_out.monitor.
 pactl load-module module-null-sink sink_name=meeting_out \
     sink_properties=device.description=meeting_out >/dev/null

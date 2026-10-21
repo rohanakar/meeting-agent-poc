@@ -57,9 +57,13 @@ services:
     deploy:
       replicas: ${MAX_CONCURRENT_BOTS:-2}
 
+  # The Docker socket: stop_bot runs here, so Stop works while every bots worker is busy.
   worker-pipeline:
     <<: *app
     command: rq worker --url redis://redis:6379/0 pipeline
+    volumes:
+      - data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
   # One-time sign-in for signed-in bots: docker compose --profile login up bot-login,
   # then open http://localhost:6080/vnc.html. Published on localhost only; on EC2 use an SSH tunnel.

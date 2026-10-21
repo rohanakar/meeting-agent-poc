@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     notice_text: str = DEFAULT_NOTICE
     admission_timeout_s: int = 600
     alone_timeout_s: int = 120
+    # Leaves when no meeting audio has arrived for this long, whatever the page shows.
+    silence_timeout_s: int = 600
     max_meeting_s: int = 3 * 60 * 60
 
 
@@ -72,10 +74,14 @@ class BotSettings(BaseSettings):
     proxy_url: str = ""
     # A Chromium profile signed in by the bot-login container; empty for an anonymous guest.
     profile_dir: str = ""
+    # <platform>.json here replaces an adapter's selectors without a rebuild.
+    selectors_dir: Path = Path("/data/selectors")
     notice_text: str = DEFAULT_NOTICE
     notice_audio: str = ""
     admission_timeout_s: int = 600
     alone_timeout_s: int = 120
+    # Leaves when no meeting audio has arrived for this long, whatever the page shows.
+    silence_timeout_s: int = 600
     max_meeting_s: int = 3 * 60 * 60
     api_url: str = "http://api:8000"
     internal_token: str = ""
