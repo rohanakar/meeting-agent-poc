@@ -1,3 +1,10 @@
+FROM node:22-slim AS ui
+WORKDIR /ui
+COPY ui/package.json ui/package-lock.json ./
+RUN npm ci
+COPY ui ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12 /uv /usr/local/bin/uv
@@ -12,5 +19,6 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY prompts ./prompts
 COPY meeting_agent ./meeting_agent
+COPY --from=ui /ui/dist ./ui/dist
 RUN uv sync --frozen --no-dev
 ENV PATH="/app/.venv/bin:$PATH"
