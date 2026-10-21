@@ -499,6 +499,7 @@ bot = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx2" },
     { name = "pytest" },
     { name = "respx" },
     { name = "ruff" },
@@ -527,6 +528,7 @@ provides-extras = ["bot"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx2", specifier = ">=2.12" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "respx", specifier = ">=0.22" },
     { name = "ruff", specifier = ">=0.9" },

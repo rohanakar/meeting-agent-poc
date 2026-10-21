@@ -76,3 +76,8 @@ class BotSettings(BaseSettings):
     api_url: str = "http://api:8000"
     internal_token: str = ""
     out_dir: Path = Path("/data/meetings/unknown")
+
+
+def meeting_dir(meeting_id: object) -> Path:
+    """Where one meeting's audio, participants and debug files live, on the shared volume."""
+    return get_settings().data_dir / "meetings" / str(meeting_id)
