@@ -69,6 +69,9 @@ class GoogleMeet(MeetingAdapter):
         switch = page.locator(self.s["mic_on_button" if on else "mic_off_button"])
         changed = page.locator(self.s["mic_off_button" if on else "mic_on_button"])
         if not await is_visible(changed):
+            # Admitted by its media, the bot can get here before Meet draws the call's controls:
+            # with no button to click, the notice was never heard.
+            await page.locator(self.s["leave_button"]).first.wait_for(timeout=30_000)
             await click_if_visible(switch)
             await changed.first.wait_for(timeout=5000)
 
