@@ -91,6 +91,8 @@ def segment(idx: int, label: str, start_ms: int, text: str) -> TranscriptSegment
 def test_transcribe_stores_turns_and_queues_processing(db: Engine) -> None:
     meeting = add_meeting(db, "transcribing")
     write_audio(meeting, "sine=frequency=300")
+    marks = [{"t_ms": 500, "name": "Anna"}, {"t_ms": 1500, "name": "Ben"}]
+    (meeting_dir(meeting.id) / "speaker_timeline.json").write_text(json.dumps(marks))
     route = respx.post(STT_URL).mock(
         return_value=httpx.Response(
             200,
@@ -114,6 +116,8 @@ def test_transcribe_stores_turns_and_queues_processing(db: Engine) -> None:
         ]
         assert session.get(Meeting, meeting.id).status == "processing"
     assert b'name="diarize"' in route.calls[0].request.content
+    # Two people's captions moved, so ElevenLabs is told to find two voices.
+    assert b'name="num_speakers"\r\n\r\n2\r\n' in route.calls[0].request.content
     [job] = get_queue(PIPELINE_QUEUE).jobs
     assert job.func_name == "meeting_agent.worker.jobs.process"
 
