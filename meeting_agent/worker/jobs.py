@@ -21,7 +21,7 @@ from ..enums import EventKind, MeetingStatus
 from ..models import ActionItem, BotEvent, Chunk, Meeting, Summary, TranscriptSegment
 from ..pipeline.chunks import summary_chunks, transcript_chunks
 from ..pipeline.embed import embed_texts
-from ..pipeline.speaker_map import map_speakers, read_attendees
+from ..pipeline.speaker_map import map_speakers, name_turns, read_attendees
 from ..pipeline.stt import transcribe_file
 from ..pipeline.summarize import summarize
 from ..queues import PIPELINE_QUEUE, get_queue
@@ -31,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 # ffmpeg reports digital silence as -91 dB. Anything this quiet holds no speech.
 SILENCE_DB = -60.0
+# The most speakers ElevenLabs can tell apart.
+MAX_SPEAKERS = 32
 
 
 # The spoken notice ships in the repo and the image, so every deploy has it; the bot plays it as
@@ -129,7 +131,11 @@ def max_volume_db(path: Path) -> float:
 
 
 def transcribe(meeting_id: str) -> None:
-    audio = meeting_dir(meeting_id) / "audio.ogg"
+    folder = meeting_dir(meeting_id)
+    audio = folder / "audio.ogg"
+    # Who spoke when, from the captions; their count tells ElevenLabs how many voices to find.
+    marks = read_json(folder / "speaker_timeline.json")
+    speakers = len({mark["name"] for mark in marks})
     try:
         volume = max_volume_db(audio)
         if volume < SILENCE_DB:
@@ -137,15 +143,15 @@ def transcribe(meeting_id: str) -> None:
             # connected its audio. Say so instead of summarising silence.
             fail(meeting_id, strings.SILENT_RECORDING.format(volume=volume))
             return
-        turns = transcribe_file(audio)
+        turns = transcribe_file(audio, num_speakers=min(speakers, MAX_SPEAKERS) or None)
     except Exception as error:
         fail(meeting_id, strings.TRANSCRIPTION_FAILED.format(error=error)[:500])
         raise
 
     # The speaker map: ElevenLabs' labels to the names (and emails) the bot saw in the meeting.
-    folder = meeting_dir(meeting_id)
     attendees = read_attendees(read_json(folder / "participants.json"))
-    matches = map_speakers(turns, read_json(folder / "speaker_timeline.json"), attendees)
+    matches = map_speakers(turns, marks, attendees)
+    names = name_turns(turns, marks, matches, attendees)
     (folder / "speaker_map.json").write_text(
         json.dumps({label: asdict(match) for label, match in matches.items()}, indent=2)
     )
@@ -160,13 +166,13 @@ def transcribe(meeting_id: str) -> None:
                 meeting_id=meeting.id,
                 idx=idx,
                 speaker_label=turn.speaker_label,
-                speaker_name=match.name if (match := matches.get(turn.speaker_label)) else None,
+                speaker_name=match.name if match else None,
                 speaker_email=match.email if match else None,
                 start_ms=turn.start_ms,
                 end_ms=turn.end_ms,
                 text=turn.text,
             )
-            for idx, turn in enumerate(turns)
+            for idx, (turn, match) in enumerate(zip(turns, names, strict=True))
         )
         add_event(
             session,

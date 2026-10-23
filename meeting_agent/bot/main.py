@@ -159,13 +159,17 @@ async def watch(
             # this shows where the platform put it.
             await page.screenshot(path=settings.out_dir / "debug" / "in-call.png")
             (settings.out_dir / "debug" / "in-call.html").write_text(await page.content())
-        # One participant is the bot itself. An empty list means the page did not say, which
-        # leaves the timer as it is: it used to restart it, and the bot then never left.
-        if len(names) == 1:
+        # The page's own count first: while a screen is shared, the tiles show only the bot and
+        # "N others", and the bot left a meeting of 18 as "alone".
+        count = await adapter.participant_count(page) or len(names)
+        # One participant is the bot itself, unless someone was heard this poll. No count means
+        # the page did not say, which leaves the timer as it is: it used to restart it, and the
+        # bot then never left.
+        if count == 1 and last_sound != now:
             alone_since = alone_since or now
             if now - alone_since > settings.alone_timeout_s:
                 return "alone"
-        elif names:
+        elif count:
             alone_since = None
 
         if now - started > settings.max_meeting_s:

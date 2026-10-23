@@ -27,7 +27,9 @@ class Turn:
     text: str
 
 
-def transcribe_file(path: Path) -> list[Turn]:
+def transcribe_file(path: Path, num_speakers: int | None = None) -> list[Turn]:
+    """num_speakers: how many people spoke, when the bot saw it in the captions. Without it
+    ElevenLabs allows its maximum (32) and still gave a meeting of nine speakers four voices."""
     settings = get_settings()
     client = ElevenLabs(
         api_key=settings.elevenlabs_api_key,
@@ -39,6 +41,7 @@ def transcribe_file(path: Path) -> list[Turn]:
         # Named with its extension: ElevenLabs reads the audio format from the file name.
         file=(path.name, path.read_bytes(), "audio/ogg"),
         diarize=True,
+        num_speakers=num_speakers,
         timestamps_granularity="word",
     )
     # Multichannel and deferred responses come back only when asked for, and this never asks.
