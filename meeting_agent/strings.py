@@ -108,6 +108,8 @@ MEET_SELECTORS: dict[str, str | re.Pattern[str]] = {
     "chat_group": '[jsname="Ypafjf"]',
     "chat_sender": 'div:has(> [jsname="biJjHb"])',
     "chat_time": '[jsname="biJjHb"]',
+    # Opens the people panel and shows how many are in the call.
+    "people_button": re.compile(r"^People$"),
     "participant_tile": "[data-participant-id]",
     "participant_name": "span.notranslate",
     # Only other people's tiles carry a control for their microphone ("You can't mute X's

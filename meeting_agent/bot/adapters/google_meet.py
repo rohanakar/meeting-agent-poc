@@ -1,3 +1,5 @@
+import re
+
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import Locator, Page
 
@@ -102,6 +104,16 @@ class GoogleMeet(MeetingAdapter):
             name = await self.tile_name(tile)
             names[participant_id] = name or strings.PLACEHOLDER_NAME.format(number=len(names) + 1)
         return sorted(names.values())
+
+    async def participant_count(self, page: Page) -> int | None:
+        # The People button shows the count, e.g. 18 while the tiles show the bot and "16 others".
+        try:
+            for button in await page.get_by_role("button", name=self.s["people_button"]).all():
+                if count := re.search(r"\d+", await button.inner_text()):
+                    return int(count.group())
+        except PlaywrightError:
+            pass
+        return None
 
     async def own_name(self, page: Page) -> str | None:
         candidates = set()

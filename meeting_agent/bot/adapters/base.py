@@ -67,6 +67,11 @@ class MeetingAdapter:
         say, which is not the same as the bot being alone."""
         raise NotImplementedError
 
+    async def participant_count(self, page: Page) -> int | None:
+        """How many people the call says it has, the bot included, or None when the page shows
+        no count. Tiles can miss people: a shared screen folds most of them into "N others"."""
+        return None
+
     async def ended_reason(self, page: Page) -> str | None:
         """Why the meeting is over for the bot, or None while it goes on."""
         raise NotImplementedError
